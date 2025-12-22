@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package rl;
+option java_multiple_files =  true;
+
+option java_package = "com.yourorg.rl";
+option java_outer_classname = "RlProto";
+
+service RLEnv {
+  rpc Rollout(stream StepRequest) returns (stream StepResponse);
+}
+
+message StepRequest {
+  uint32 num_envs = 1;
+
+  // One move per board (env)
+  repeated Move action = 2;
+
+  // Optional: if true for env i, server resets env i before applying action[i]
+  repeated bool reset = 3;
+}
+
+message Move {
+  uint32 from_sq = 1;     // 0..63
+  uint32 to_sq = 2;       // 0..63
+  uint32 promotion = 3;   // 0=none,1=Q,2=R,3=B,4=N
+}
+
+message LegalMoves {
+  repeated Move moves = 1;       // variable length
+}
+
+message Observation{
+  uint32 dimension = 1; //dimension of the Plane array
+  repeated float observationPoints = 2; //each number in the plane flattened array
+}
+
+message StepResponse {
+  uint32 num_envs = 1;
+
+  // Observation per env: here we assume a fixed feature vector
+  repeated Observation obs = 2; //an array for each env
+
+  //reward(one for each env)
+  repeated float reward = 3;
+
+  //one for each env
+  repeated bool done = 4;
+
+  // array of legal moves
+  repeated LegalMoves moves = 5;
+}

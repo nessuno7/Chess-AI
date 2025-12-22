@@ -1,4 +1,4 @@
-package main.Response;
+package main.response;
 
 import main.chess.Pieces.Piece;
 

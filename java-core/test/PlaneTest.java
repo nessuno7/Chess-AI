@@ -1,7 +1,7 @@
 import main.chess.Pieces.ChessBoard;
 import main.chess.Pieces.Pawn;
 import main.chess.Pieces.Piece;
-import main.Response.Plane;
+import main.response.Plane;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 

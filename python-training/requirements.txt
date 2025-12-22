@@ -1,3 +1,5 @@
 gymnasium
 numpy
 requests
+fastapi
+uvicorn

@@ -1,4 +1,4 @@
-package main.Response;
+package main.response;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
