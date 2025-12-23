@@ -13,20 +13,20 @@ message StepRequest {
   uint32 num_envs = 1;
 
   // One move per board (env)
-  repeated Move action = 2;
+  repeated ProtoMove action = 2;
 
   // Optional: if true for env i, server resets env i before applying action[i]
   repeated bool reset = 3;
 }
 
-message Move {
+message ProtoMove {
   uint32 from_sq = 1;     // 0..63
   uint32 to_sq = 2;       // 0..63
   uint32 promotion = 3;   // 0=none,1=Q,2=R,3=B,4=N
 }
 
 message LegalMoves {
-  repeated Move moves = 1;       // variable length
+  repeated ProtoMove moves = 1;       // variable length
 }
 
 message Observation{

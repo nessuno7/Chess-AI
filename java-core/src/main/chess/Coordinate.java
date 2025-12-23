@@ -81,6 +81,10 @@ public class Coordinate implements Comparable<Coordinate> {
         this.column = 7 - this.column;
     }
 
+    public int flatten(){
+        return (row*10)+column;
+    }
+
     @Override
     public String toString(){
         return ""+ row + column;
