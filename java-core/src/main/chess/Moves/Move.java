@@ -53,6 +53,15 @@ public class Move {
         finalCoordinate.rotate();
     }
 
+    public int getFlattenInitCoord(){
+        return intialCoordinate.flatten();
+    }
+
+    public int getFlattenFinalCoord(){
+        return finalCoordinate.flatten();
+    }
+
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {

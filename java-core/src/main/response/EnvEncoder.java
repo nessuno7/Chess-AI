@@ -1,19 +1,13 @@
 package main.response;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonObject;
 import main.chess.Moves.Move;
 import main.chess.Moves.Promotion;
 import main.chess.Pieces.ChessBoard;
 import main.chess.Pieces.Piece;
 
-import java.util.LinkedList;
 import java.util.List;
-import rl.StepRequest;
-import rl.StepResponse;
-//import rl.Move;
-import rl.LegalMoves;
-import rl.Observation;
+
+import rl.*;
 
 
 public class EnvEncoder {
@@ -23,6 +17,7 @@ public class EnvEncoder {
     float rewardBefore;
     float rewardCurrent;
     boolean done;
+    boolean currentPlayer;
 
     public EnvEncoder() throws Exception{
         this.chessBoard = new ChessBoard();
@@ -38,6 +33,8 @@ public class EnvEncoder {
         rewardCurrent = 0;
         updatePlanes();
         updateRewards();
+
+        currentPlayer = chessBoard.getCurrentPlayer();
     }
 
     public void reset() throws Exception{
@@ -53,17 +50,41 @@ public class EnvEncoder {
         rewardCurrent = 0;
         updatePlanes();
         updateRewards();
+        currentPlayer = chessBoard.getCurrentPlayer();
     }
 
-    public void step(int moveIndex) throws Exception{
+    public void step(rl.ProtoMove action) throws Exception{
         if (currentMoves == null || currentMoves.isEmpty()) {
             currentMoves = getExpandedLegalMoves();
         }
 
-        chessBoard.updateState(currentMoves.get(moveIndex));
+        if(action.getFromSq() != action.getToSq()){ //checks that the action is not an initial reuest action
+            for(Move move: currentMoves){
+                if(move.getFlattenInitCoord() == action.getFromSq() && move.getFlattenFinalCoord() == action.getToSq()){
+                    if(move.getClass() == Promotion.class){
+                        if (((Promotion)move).getNewPieceType() == switch(action.getPromotion()){
+                            case 1-> Piece.PieceType.QUEEN;
+                            case 2-> Piece.PieceType.ROOK;
+                            case 3 -> Piece.PieceType.BISHOP;
+                            case 4-> Piece.PieceType.KNIGHT;
+                            default -> throw new IllegalArgumentException("Unexpected value: " + action.getPromotion());
+                        }){
+                            currentPlayer = chessBoard.getCurrentPlayer();
+                            chessBoard.updateState(move);
+                        }
+                    }
+                    else{
+                        currentPlayer = chessBoard.getCurrentPlayer();
+                        chessBoard.updateState(move);
+                        break;
+                    }
+                }
+            }
+        }
+
         currentMoves = getExpandedLegalMoves();
         updateRewards();
-        updateRewards();
+        updatePlanes();
     }
 
     private void updatePlanes() throws Exception{
@@ -142,33 +163,54 @@ public class EnvEncoder {
         return rewardCurrent;
     }
 
-    public boolean isdone(){
+    public boolean isDone(){
         return done;
     }
 
-    public rl.RlProto.EnvState toEnvStateProto() {
-        rl.RlProto.EnvState.Builder b = rl.RlProto.EnvState.newBuilder();
 
+    /*
+    after step()
+    firs call to the function, without a move, will return current state, and current possible moves
+    Then futures calls with move to execute
+     */
+    public EnvState toEnvStateResponse() throws Exception{
+        EnvState.Builder envStateBuild = EnvState.newBuilder();
+
+        Observation.Builder obsBuild = Observation.newBuilder();
         float[] obs = getObservationFloat();
-        b.setObsDim(obs.length);
-        for (float v : obs) b.addObs(v);
+        obsBuild.setDimension(obs.length);
+        for (float v : obs) obsBuild.addObservationPoints(v);
+        envStateBuild.setObs(obsBuild);
 
-        b.setReward(getRewardCurrent());
-        b.setDone(isDone());
+        envStateBuild.setReward(getRewardBefore());
+        envStateBuild.setDone(isDone());
+        envStateBuild.setSide(currentPlayer);
 
-        // legal moves
         if (currentMoves == null || currentMoves.isEmpty()) {
-            currentMoves = buildExpandedLegalMoveList();
+            currentMoves = getExpandedLegalMoves();
         }
         for (Move m : currentMoves) {
-            b.addLegalMoves(toProtoMove(m));
+            ProtoMove.Builder protoMove = ProtoMove.newBuilder();
+            protoMove.setFromSq(m.getFlattenInitCoord());
+            protoMove.setToSq(m.getFlattenFinalCoord());
+
+            if(m.getClass() == Promotion.class){
+                protoMove.setPromotion(switch(((Promotion) m).getNewPieceType()){
+                    case QUEEN-> 1;
+                    case ROOK-> 2;
+                    case BISHOP -> 3;
+                    case KNIGHT-> 4;
+                    default -> throw new IllegalStateException("Unexpected value: " + ((Promotion) m).getNewPieceType());
+                });
+            }
+            else{
+                protoMove.setPromotion(0);
+            }
+
+            envStateBuild.addMoves(protoMove);
         }
 
-        // optional metadata (if you add them to proto)
-        // b.setWhiteToMove(chessBoard.getCurrentPlayer());
-        // b.setPly(...);
-
-        return b.build();
+        return envStateBuild.build();
     }
 
 

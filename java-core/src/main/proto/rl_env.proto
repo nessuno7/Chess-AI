@@ -13,20 +13,16 @@ message StepRequest {
   uint32 num_envs = 1;
 
   // One move per board (env)
-  repeated Move action = 2;
+  repeated ProtoMove action = 2;
 
   // Optional: if true for env i, server resets env i before applying action[i]
   repeated bool reset = 3;
 }
 
-message Move {
+message ProtoMove {
   uint32 from_sq = 1;     // 0..63
   uint32 to_sq = 2;       // 0..63
   uint32 promotion = 3;   // 0=none,1=Q,2=R,3=B,4=N
-}
-
-message LegalMoves {
-  repeated Move moves = 1;       // variable length
 }
 
 message Observation{
@@ -34,20 +30,23 @@ message Observation{
   repeated float observationPoints = 2; //each number in the plane flattened array
 }
 
-message StepResponse {
-  uint32 num_envs = 1;
-
+message EnvState{
   // Observation per env: here we assume a fixed feature vector
-  repeated Observation obs = 2; //an array for each env
+  Observation obs = 1; //an array for each env
 
-  repeated bool side = 3; //true for white and false for black
+  bool side = 2; //true for white and false for black
 
   //reward(one for each env)
-  repeated float reward = 4;
+  float reward = 3;
 
   //one for each env
-  repeated bool done = 5;
+  bool done = 4;
 
   // array of legal moves
-  repeated LegalMoves moves = 6;
+  repeated ProtoMove moves = 5;
+}
+
+message StepResponse {
+  uint32 num_envs = 1;
+  repeated EnvState states = 2;
 }
