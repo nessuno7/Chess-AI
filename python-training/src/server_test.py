@@ -36,7 +36,7 @@ def main():
     channel = grpc.insecure_channel("localhost:50051")
     stub = pb_grpc.RLEnvStub(channel)
 
-    q: "queue.Queue[pb.StepRequest | None]" = queue.Queue()
+    q: queue.Queue[pb.StepRequest | None] = queue.Queue()
 
     # Start the bidirectional stream: iterator in, iterator out
     responses = stub.Rollout(request_generator(q))
