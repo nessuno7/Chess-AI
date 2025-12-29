@@ -88,8 +88,15 @@ public class EnvEncoder {
     }
 
     private void updatePlanes() throws Exception{
+        if(!currentPlayer){
+            this.chessBoard.rotateCoords(); //rotates if curr player is black
+        }
         for(Piece piece: this.chessBoard.getPiecesOnBoard()){
             piecePlaneArray[piece.getPieceType().getPieceId()].update(piece);
+        }
+
+        if(!currentPlayer){
+            this.chessBoard.rotateCoords(); //rotates back
         }
     }
 
@@ -189,7 +196,12 @@ public class EnvEncoder {
         if (currentMoves == null || currentMoves.isEmpty()) {
             currentMoves = getExpandedLegalMoves();
         }
-        for (Move m : currentMoves) {
+
+
+        for (Move m : currentMoves) { //rotates move if it is black so the RL always return in absolute terms
+            if(!currentPlayer){
+                m.rotateMove();
+            }
             ProtoMove.Builder protoMove = ProtoMove.newBuilder();
             protoMove.setFromSq(m.getFlattenInitCoord());
             protoMove.setToSq(m.getFlattenFinalCoord());
@@ -212,43 +224,4 @@ public class EnvEncoder {
 
         return envStateBuild.build();
     }
-
-
-
-
-
-    /*public Gson respond(){
-        Gson gson = new Gson();
-
-        JsonObject json= new JsonObject();
-        json.add("planes", gson.toJsonTree(flattenAll()));
-
-        currentMoves = chessBoard.getAllLegalMoves();
-        for(Move move: chessBoard.getAllLegalMoves()){
-            if(move.getClass() == Promotion.class){
-                Move epKnight = move.copy();
-                ((Promotion)epKnight).setNewPieceType(Piece.PieceType.KNIGHT);
-                Move epRook = move.copy();
-                ((Promotion)epRook).setNewPieceType(Piece.PieceType.ROOK);
-                Move epBishop = move.copy();
-                ((Promotion)epBishop).setNewPieceType(Piece.PieceType.BISHOP);
-
-                currentMoves.add(epKnight);
-                currentMoves.add(epRook);
-                currentMoves.add(epBishop);
-                break;
-            }
-        }
-
-        json.add("legal moves", gson.toJsonTree(currentMoves));
-        json.addProperty("reward previous", rewardBefore);
-        json.addProperty("reward current", rewardCurrent);
-
-        gson.toJson(json);
-
-        return gson;
-    }
-
-
-    */
 }

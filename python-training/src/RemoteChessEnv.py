@@ -39,3 +39,7 @@ class RemoteChessEnv:
         self.actions_queue.put(pb.StepRequest(num_envs=self.num_envs, action=actions, reset=resets))
         self.current_games = next(self.stream)
         return self.current_games
+
+    def reset(self):
+        dummy = [pb.ProtoMove(from_sq=0, to_sq=0, promotion=pb.PROMO_NONE) for _ in range(self.num_envs)]
+        return self.step(dummy, [True for _ in range(self.num_envs)])

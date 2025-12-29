@@ -10,18 +10,7 @@ sys.path.append(GENERATED_DIR)
 import rl_env_pb2 as pb
 import rl_env_pb2_grpc as pb_grpc
 
-PROMO_V = 5
-N_SQ = 64
-ACTION_DIM = N_SQ * N_SQ * PROMO_V #64*64 + all possible promotions that ca only be from 2nd or 7th row to 1st or 8th * 4(possible pormotions)
 
-def moveToIndex(m: pb.ProtoMove):
-    return ((int(m.from_sq) * N_SQ) + int(m.to_sq)) * PROMO_V + int(m.promotion)
-
-def indextoMove(index):
-    promo = index%PROMO_V
-    to_sq = ((index-promo)/PROMO_V)%N_SQ
-    from_sq = ((((index-promo)/PROMO_V)-to_sq)/N_SQ)%N_SQ
-    return pb.ProtoMove(from_sq=from_sq, to_sq=to_sq, promotion=promo)
 
 
 class MLInput:
