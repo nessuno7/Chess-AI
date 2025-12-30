@@ -7,7 +7,7 @@ from typing import List, Tuple
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+#import torch.nn.functional as F
 import grpc
 
 # --- import generated protobuf stubs ---
@@ -21,18 +21,7 @@ import rl_env_pb2_grpc as pb_grpc
 
 # =========================
 # Remote env wrapper (bidirectional streaming using request iterator)
-# =========================
-
-import queue
-
-def request_generator(q: "queue.Queue[pb.StepRequest | None]"):
-    while True:
-        item = q.get()
-        if item is None:
-            return
-        yield item
-
-
+# ========================
 from RemoteChessEnv import RemoteChessEnv
 import ResponseDecoder as rs
 # =========================
@@ -70,10 +59,10 @@ class ActorCritic(nn.Module):
 
     def move_logits(
             self,
-            obs: torch.Tensor,            # [B, obs_dim]
-            moves_from: torch.Tensor,     # [B, K]
-            moves_to: torch.Tensor,       # [B, K]
-            moves_promo: torch.Tensor,    # [B, K]
+            obs: torch.Tensor,            # [B, obs_dim] # planes observation
+            moves_from: torch.Tensor,     # [B, K] include all the initial coordinate of the legal moves
+            moves_to: torch.Tensor,       # [B, K] includes all the final coordinates of the legal moves
+            moves_promo: torch.Tensor,    # [B, K] inlcude all the final promo coodirnate (0 if no promotion)
     ) -> torch.Tensor:
         """
         Returns logits over the K moves for each batch item: [B, K]
@@ -95,23 +84,30 @@ class ActorCritic(nn.Module):
 # Utilities: pad legal moves, sample only legal moves
 # =========================
 
-def envstate_to_numpy_obs(env_state: pb.EnvState) -> np.ndarray:
+from RemoteChessEnv import RemoteChessEnv
+
+
+
+
+
+""" 
+def envstate_to_numpy_obs(env_state: pb.EnvState) -> np.ndarray: already in ResponseDecoder: getEnvObs
     # EnvState.obs is a repeated float
     return np.asarray(env_state.obs, dtype=np.float32)
 
-def extract_legal_moves(env_state: pb.EnvState) -> List[pb.ProtoMove]:
-    return list(env_state.legal_moves)
 
+
+already in RespondeDecoder: getLegalMovesTensors
 def pad_legal_moves(
         legal_moves_batch: List[List[pb.ProtoMove]],
         device: str,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    """
+    
     legal_moves_batch: length B, each element is list[ProtoMove] of variable length
     Returns:
       moves_from/to/promo: Long tensors [B, Kmax]
       mask: Bool tensor [B, Kmax] True for real moves
-    """
+    
     B = len(legal_moves_batch)
     Kmax = max(len(m) for m in legal_moves_batch)
     if Kmax == 0:
@@ -132,15 +128,12 @@ def pad_legal_moves(
             mask[b, k] = True
 
     return moves_from, moves_to, moves_promo, mask
-
-
+"""
 
 @torch.no_grad()
 def select_actions(
         model: ActorCritic,
-        obs_np_list: List[np.ndarray],
-        legal_moves_batch: List[List[pb.ProtoMove]],
-        device: str,
+        decoder: rs.ResponseDecoder
 ) -> Tuple[List[pb.ProtoMove], torch.Tensor, torch.Tensor, torch.Tensor, Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
     """
     Returns:
@@ -150,8 +143,9 @@ def select_actions(
       value: tensor [B]
       padded_move_tensors: (moves_from, moves_to, moves_promo, mask) for later PPO update
     """
-    obs = torch.tensor(np.stack(obs_np_list), dtype=torch.float32, device=device)  # [B, obs_dim]
-    moves_from, moves_to, moves_promo, mask = pad_legal_moves(legal_moves_batch, device)
+
+    obs = decoder.getObservationMatrixTensor()
+    moves_from, moves_to, moves_promo, mask = decoder.getLegalMovesTensors()
 
     logits = model.move_logits(obs, moves_from, moves_to, moves_promo)  # [B, K]
     logits = logits.masked_fill(~mask, float("-inf"))
@@ -163,8 +157,8 @@ def select_actions(
 
     # Convert idx -> actual ProtoMove
     chosen_moves = []
-    for b in range(len(legal_moves_batch)):
-        chosen_moves.append(legal_moves_batch[b][idx[b].item()])
+    for b in range(decoder.num_envs):
+        chosen_moves.append(decoder.envs[b].moves[idx[b].item()])
 
     return chosen_moves, idx, logprob, value, (moves_from, moves_to, moves_promo, mask)
 
@@ -230,12 +224,14 @@ def ppo_train(
         device=None,
 ):
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
-    env = RemoteChessEnv(host=host, num_envs=num_envs)
-    model = ActorCritic(obs_dim=OBS_DIM).to(device)
+    env = RemoteChessEnv(num_envs=num_envs, host=host)
+    model = ActorCritic(obs_dim=rs.OBS_DIM).to(device)
     optim = torch.optim.Adam(model.parameters(), lr=lr)
 
     # Prime env (get first response)
-    resp = env.reset_like_first_step()
+    resp = rs.ResponseDecoder(env.reset(), device)
+
+    resets = resp.getNextResets()
 
     for update in range(total_updates):
         # --- Collect rollout of length T across B envs ---
@@ -252,23 +248,24 @@ def ppo_train(
         moves_promo_list = []
         mask_list = []
 
-        obs_np_list = [envstate_to_numpy_obs(s) for s in resp.env]
+        #obs_np_list = resp.getObservationMatrix()
 
         for t in range(rollout_steps):
-            legal_moves_batch = [extract_legal_moves(s) for s in resp.env]
-
             chosen_moves, action_idx, logprob, value, (mf, mt, mp, msk) = select_actions(
-                model, obs_np_list, legal_moves_batch, device
+                model, resp
             )
 
             # step env
-            resp2 = env.step(chosen_moves)
+            resp = rs.ResponseDecoder(env.step(chosen_moves, resets=resets), device=device)
+            resets = resp.getNextResets()
 
-            rewards = torch.tensor([s.reward for s in resp2.env], dtype=torch.float32, device=device)  # [B]
-            dones = torch.tensor([s.done for s in resp2.env], dtype=torch.bool, device=device)         # [B]
+            #rewards = torch.tensor([s.reward for s in resp2.env], dtype=torch.float32, device=device)  # [B]
+            #dones = torch.tensor([s.done for s in resp2.env], dtype=torch.bool, device=device)         # [B]
+            rewards = resp.getRewardTensor()
+            dones = resp.getDoneTensor()
 
             # store
-            obs_buf.append(torch.tensor(np.stack(obs_np_list), dtype=torch.float32, device=device))  # [B, obs_dim]
+            obs_buf.append(resp.getObservationMatrixTensor())  # [B, obs_dim]
             rewards_buf.append(rewards)
             dones_buf.append(dones)
             values_buf.append(value)
@@ -281,12 +278,12 @@ def ppo_train(
             mask_list.append(msk)
 
             # advance
-            resp = resp2
-            obs_np_list = [envstate_to_numpy_obs(s) for s in resp.env]
+            #resp = resp2
+            #obs_np_list = [envstate_to_numpy_obs(s) for s in resp.env]
 
         # bootstrap value for GAE
         with torch.no_grad():
-            next_obs = torch.tensor(np.stack(obs_np_list), dtype=torch.float32, device=device)
+            next_obs = resp.getObservationMatrixTensor()
             next_value = model.value(next_obs)  # [B]
 
         rewards_t = torch.stack(rewards_buf, dim=0)  # [T, B]

@@ -5,7 +5,7 @@ ACTION_DIM = N_SQ * N_SQ #64*64, promotions are handled separately through the p
 
 
 """"
-Old versions
+Old version:
 def moveToIndex(m: pb.ProtoMove):
     return (int(m.from_sq) * N_SQ) + int(m.to_sq)
 
@@ -13,6 +13,35 @@ def indextoMove(index, promo_masking):
     to_sq = index%N_SQ
     from_sq = ((index-to_sq)/N_SQ)%N_SQ
     return pb.ProtoMove(from_sq=from_sq, to_sq=to_sq, promotion=promo_masking)
+    
+    
+Working ProtoMove version:
+def moveToIndex(m: pb.ProtoMove):
+    if m.promotion != 0:
+        index = 4095 + ((m.from_sq%8)*2 + m.to_sq)*4 + m.promotion
+    else:
+        index = (m.from_sq * N_SQ) + m.to_sq
+
+    return index
+
+def indexToMove(index):
+    if index > 4183:
+        raise Exception("Index out of range")
+
+    if index > 4095: #promotion move
+        rest = index - 4095
+        promotion = rest%4
+        if promotion == 0:
+            promotion = 4
+        rest2 = (rest-promotion)/4
+        from_h = int((rest2+1)/3)
+        from_sq = 8+from_h
+        to_sq = rest2-from_h*2
+    else:
+        to_sq = index%N_SQ
+        from_sq = ((index-to_sq)/N_SQ)%N_SQ
+        promotion = 0
+    return pb.ProtoMove(from_sq=from_sq, to_sq=to_sq, promotion=promotion)
     
 """
 
@@ -22,7 +51,7 @@ def moveToIndex(from_sq, to_sq, promotion):
     else:
         index = (from_sq * N_SQ) + to_sq
 
-    return index
+    return int(index)
 
 def indexToMove(index):
     if index > 4095: #promotion move
@@ -38,11 +67,11 @@ def indexToMove(index):
         to_sq = index%N_SQ
         from_sq = ((index-to_sq)/N_SQ)%N_SQ
         promotion = 0
-    return (from_sq, to_sq, promotion)
+    return (int(from_sq), int(to_sq), int(promotion))
 
 def testAll():
     for i in range(8):
-        for p in range(4):
+        for p in range(1,5):
             u1 = i-1
             u2 = i+1
             if u1>=0:
@@ -65,8 +94,7 @@ def testAll():
                 print("bad" + str(index3))
 
 if __name__=="__main__":
-    print(indexToMove(4183))
-    #testAll()
+    testAll()
 
     print("good")
 

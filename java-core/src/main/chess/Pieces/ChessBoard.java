@@ -343,6 +343,7 @@ public class ChessBoard {
             }
         }
 
+        System.out.print("Wait");
         throw new IllegalArgumentException("There is no King Piece");
     }
 

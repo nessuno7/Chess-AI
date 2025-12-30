@@ -54,4 +54,20 @@ public class MoveTest {
         m.rotateMove();
         assertEquals(m1, m);
     }
+
+    @Test
+    public void testFlattenCoordinatesEdge(){
+        Move m2 = new Move (new Coordinate(0, 0),  new Coordinate(7, 7), Piece.PieceType.PAWN, true);
+        assertEquals(0, m2.getFlattenInitCoord());
+        assertEquals(63, m2.getFlattenFinalCoord());
+    }
+
+    @Test
+    public void testFlattenCoordinates(){
+        Move m2 = new Move (new Coordinate(6, 1),  new Coordinate(0, 5), Piece.PieceType.PAWN, true);
+        assertEquals(49, m2.getFlattenInitCoord());
+        assertEquals(5, m2.getFlattenFinalCoord());
+    }
+
+
 }

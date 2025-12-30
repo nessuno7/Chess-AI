@@ -1,5 +1,6 @@
 package main.response;
 
+import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import rl.RLEnvGrpc;
 import rl.StepRequest;
@@ -21,11 +22,19 @@ public class RlEnvService extends RLEnvGrpc.RLEnvImplBase {
         return new StreamObserver<>() {
             @Override
             public void onNext(StepRequest req) {
+                System.out.println("Received StepRequest with "
+                        + req.getActionCount() + " actions");
                 try {
                     int n = envs.length;
 
                     StepResponse.Builder resp = StepResponse.newBuilder()
                             .setNumEnvs(n);
+
+                    if (req.getActionCount() != n) {
+                        throw new IllegalArgumentException(
+                                "Expected " + envs.length + " actions, got " + req.getActionCount()
+                        );
+                    }
 
                     for (int i = 0; i < n; i++) {
                         // apply action for env i
@@ -42,7 +51,13 @@ public class RlEnvService extends RLEnvGrpc.RLEnvImplBase {
 
                     responseObserver.onNext(resp.build());
                 } catch (Exception e) {
-                    responseObserver.onError(e);
+                    e.printStackTrace();
+                    responseObserver.onError(
+                            Status.INTERNAL
+                                    .withDescription(e.toString())
+                                    .withCause(e)
+                                    .asRuntimeException()
+                    );
                 }
             }
 
