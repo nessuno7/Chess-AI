@@ -54,13 +54,12 @@ public class Move {
     }
 
     public int getFlattenInitCoord(){
-        return intialCoordinate.flatten();
+        return this.intialCoordinate.flatten();
     }
 
     public int getFlattenFinalCoord(){
-        return finalCoordinate.flatten();
+        return this.finalCoordinate.flatten();
     }
-
 
     @Override
     public boolean equals(Object o) {

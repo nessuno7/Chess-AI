@@ -171,6 +171,11 @@ public class Chess extends JPanel {
         });
     }
 
+    public void loadChessBoard(ChessBoard chessBoard){
+        this.currentGameState = new ChessBoard(chessBoard);
+        repaint();
+    }
+
     /**
      * (Re-)sets the game to its initial state.
      */
@@ -326,6 +331,7 @@ public class Chess extends JPanel {
 
     @Override
     public void paintComponent(Graphics g) {
+        super.paintComponent(g);
         g.drawImage(chessBoardImage, 0, 0, BOARD_WIDTH, BOARD_HEIGHT, null);
         if (pieceSelected) {
             Graphics2D g2 = (Graphics2D) g;
@@ -370,5 +376,7 @@ public class Chess extends JPanel {
             }
         }
     }
+
+
 
 }

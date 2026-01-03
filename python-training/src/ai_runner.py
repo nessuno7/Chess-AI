@@ -62,7 +62,7 @@ class ActorCritic(nn.Module):
             obs: torch.Tensor,            # [B, obs_dim] # planes observation
             moves_from: torch.Tensor,     # [B, K] include all the initial coordinate of the legal moves
             moves_to: torch.Tensor,       # [B, K] includes all the final coordinates of the legal moves
-            moves_promo: torch.Tensor,    # [B, K] inlcude all the final promo coodirnate (0 if no promotion)
+            moves_promo: torch.Tensor,    # [B, K] include all the final promo coordinate (0 if no promotion)
     ) -> torch.Tensor:
         """
         Returns logits over the K moves for each batch item: [B, K]

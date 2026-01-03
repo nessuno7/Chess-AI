@@ -1,13 +1,19 @@
 package main.response;
 
+import main.chess.Chess;
 import main.chess.Moves.Move;
 import main.chess.Moves.Promotion;
 import main.chess.Pieces.ChessBoard;
 import main.chess.Pieces.Piece;
 
+import java.awt.*;
+import java.beans.PropertyChangeListener;
+import java.beans.PropertyChangeSupport;
 import java.util.List;
 
 import rl.*;
+
+import javax.swing.*;
 
 
 public class EnvEncoder {
@@ -18,8 +24,11 @@ public class EnvEncoder {
     float rewardCurrent;
     boolean done;
     boolean currentPlayer;
+    int count =0;
+    private final PropertyChangeSupport pcs = new PropertyChangeSupport(this);
 
     public EnvEncoder() throws Exception{
+
         this.chessBoard = new ChessBoard();
         this.piecePlaneArray = new Plane[6];
         this.chessBoard.calculateAllLegalMoves();
@@ -36,6 +45,42 @@ public class EnvEncoder {
 
         currentPlayer = chessBoard.getCurrentPlayer();
     }
+
+    public void addChangeListener(PropertyChangeListener l) {
+        pcs.addPropertyChangeListener(l);
+    }
+
+    public void removeChangeListener(PropertyChangeListener l) {
+        pcs.removePropertyChangeListener(l);
+    }
+
+    public void firePropertyChange(){
+        pcs.firePropertyChange("position", null, null);
+    }
+
+    public ChessBoard getChessBoard() {
+        return chessBoard;
+    }
+
+    /*public void displayChessBoardOnce(){
+        SwingUtilities.invokeLater(() -> {
+            final JFrame frame = new JFrame("Chess");
+            frame.setLocation(300, 300);
+
+            final JPanel status_panel = new JPanel();
+            frame.add(status_panel, BorderLayout.SOUTH);
+            final JLabel status = new JLabel("Setting up...");
+            status_panel.add(status);
+            // Game board
+            final Chess board = new Chess(status);
+            board.loadChessBoard(this.chessBoard);
+            frame.add(board, BorderLayout.CENTER);
+
+            frame.pack();
+            frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+            frame.setVisible(true);
+        });
+    }*/
 
     public void reset() throws Exception{
         this.chessBoard = new ChessBoard();
@@ -54,11 +99,12 @@ public class EnvEncoder {
     }
 
     public void step(rl.ProtoMove action) throws Exception{
+        count ++;
         if (currentMoves == null || currentMoves.isEmpty()) {
             currentMoves = getExpandedLegalMoves();
         }
 
-        if(action.getFromSq() != action.getToSq()){ //checks that the action is not an initial reuest action
+        if(action.getFromSq() != action.getToSq()){ //checks that the action is not an initial request action
             for(Move move: currentMoves){
                 if(move.getFlattenInitCoord() == action.getFromSq() && move.getFlattenFinalCoord() == action.getToSq()){
                     if(move.getClass() == Promotion.class){
@@ -70,11 +116,20 @@ public class EnvEncoder {
                             default -> throw new IllegalArgumentException("Unexpected value: " + action.getPromotion());
                         }){
                             currentPlayer = chessBoard.getCurrentPlayer();
+                            if(currentPlayer){
+                                move.rotateMove();
+                            }
                             chessBoard.updateState(move);
                         }
                     }
                     else{
                         currentPlayer = chessBoard.getCurrentPlayer();
+                        System.out.println(chessBoard.getCurrentPlayer());
+                        if(currentPlayer){
+                            move.rotateMove();
+                        }
+                        System.out.printf("%-10s %-8s%n", currentPlayer, move);
+
                         chessBoard.updateState(move);
                         break;
                     }
@@ -85,17 +140,18 @@ public class EnvEncoder {
         currentMoves = getExpandedLegalMoves();
         updateRewards();
         updatePlanes();
+        pcs.firePropertyChange("position", null, null);
     }
 
     private void updatePlanes() throws Exception{
-        if(!currentPlayer){
+        if(currentPlayer){
             this.chessBoard.rotateCoords(); //rotates if curr player is black
         }
         for(Piece piece: this.chessBoard.getPiecesOnBoard()){
-            piecePlaneArray[piece.getPieceType().getPieceId()].update(piece);
+            piecePlaneArray[piece.getPieceType().getPieceId()].update(piece); //TODO: rotates ebfore move when it is black to move
         }
 
-        if(!currentPlayer){
+        if(currentPlayer){
             this.chessBoard.rotateCoords(); //rotates back
         }
     }

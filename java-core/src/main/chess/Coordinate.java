@@ -82,7 +82,7 @@ public class Coordinate implements Comparable<Coordinate> {
     }
 
     public int flatten(){
-        return (row*8)+column;
+        return (row*8+column);
     }
 
     @Override
