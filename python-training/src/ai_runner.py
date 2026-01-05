@@ -148,7 +148,7 @@ def select_actions(
     moves_from, moves_to, moves_promo, mask = decoder.getLegalMovesTensors()
 
     logits = model.move_logits(obs, moves_from, moves_to, moves_promo)  # [B, K]
-    logits = logits.masked_fill(~mask, float("-inf"))
+    logits = logits.masked_fill(~mask, -1e9)
 
     dist = torch.distributions.Categorical(logits=logits)
     idx = dist.sample()  # [B]

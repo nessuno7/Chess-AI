@@ -691,4 +691,10 @@ public class ChessBoardTest {
 
         assertTrue(condition2);
     }
+
+
+    @Test
+    public void testPawn(){
+
+    }
 }

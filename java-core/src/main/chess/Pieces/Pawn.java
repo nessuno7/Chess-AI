@@ -14,7 +14,6 @@ public class Pawn extends Piece {
     public Pawn(Coordinate coordinate, boolean white) {
         super(coordinate, white);
         pieceType = PieceType.PAWN;
-        // hasMoveAlready = false;
     }
 
     public Pawn(Pawn copy) {
@@ -38,33 +37,30 @@ public class Pawn extends Piece {
         return false;
     }
 
+    private boolean pawnScopeCondition(Coordinate newCoord){
+        if (newCoord.isValid()) {
+            return !newCoord.equals(this.coordinate);
+        }
+        return false;
+    }
+
     @Override
     public TreeSet<Coordinate> returnScope(ChessBoard currentGameState) {
         TreeSet<Coordinate> threatenedCoordinates = new TreeSet<>();
 
         Coordinate newCoord = new Coordinate(0, 0);
-        if(newCoord.isValid()) {
-            if (this.white) {
-                newCoord.setRow(this.coordinate.getRow() + 1);
-            } else {
-                newCoord.setRow(this.coordinate.getRow() - 1);
-            }
-            newCoord.setColumn(this.coordinate.getColumn() + 1);
-            if (this.pawnTakeCondition(newCoord, currentGameState)) {
-                threatenedCoordinates.add(new Coordinate(newCoord));
-            }
+
+        newCoord.setRow(this.coordinate.getRow() - 1);
+        newCoord.setColumn(this.coordinate.getColumn() + 1);
+        if (this.pawnScopeCondition(newCoord)) {
+            threatenedCoordinates.add(new Coordinate(newCoord));
         }
 
-        if(newCoord.isValid()) {
-            if (this.white) {
-                newCoord.setRow(this.coordinate.getRow() + 1);
-            } else {
-                newCoord.setRow(this.coordinate.getRow() - 1);
-            }
-            newCoord.setColumn(this.coordinate.getColumn() - 1);
-            if (this.pawnTakeCondition(newCoord, currentGameState)) {
-                threatenedCoordinates.add(new Coordinate(newCoord));
-            }
+
+        newCoord.setRow(this.coordinate.getRow() - 1);
+        newCoord.setColumn(this.coordinate.getColumn() - 1);
+        if (this.pawnScopeCondition(newCoord)) {
+            threatenedCoordinates.add(new Coordinate(newCoord));
         }
 
         return threatenedCoordinates;

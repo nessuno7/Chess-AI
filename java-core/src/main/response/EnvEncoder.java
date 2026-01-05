@@ -4,16 +4,20 @@ import main.chess.Chess;
 import main.chess.Moves.Move;
 import main.chess.Moves.Promotion;
 import main.chess.Pieces.ChessBoard;
+import main.chess.Pieces.King;
 import main.chess.Pieces.Piece;
 
 import java.awt.*;
 import java.beans.PropertyChangeListener;
 import java.beans.PropertyChangeSupport;
+import java.util.LinkedList;
 import java.util.List;
 
 import rl.*;
 
 import javax.swing.*;
+
+import static main.chess.Pieces.Piece.PieceType.KING;
 
 
 public class EnvEncoder {
@@ -26,9 +30,10 @@ public class EnvEncoder {
     boolean currentPlayer;
     int count =0;
     private final PropertyChangeSupport pcs = new PropertyChangeSupport(this);
+    final int index;
 
-    public EnvEncoder() throws Exception{
-
+    public EnvEncoder(int index) throws Exception{
+        this.index = index;
         this.chessBoard = new ChessBoard();
         this.piecePlaneArray = new Plane[6];
         this.chessBoard.calculateAllLegalMoves();
@@ -103,6 +108,7 @@ public class EnvEncoder {
         if (currentMoves == null || currentMoves.isEmpty()) {
             currentMoves = getExpandedLegalMoves();
         }
+        currentPlayer = chessBoard.getCurrentPlayer();
 
         if(action.getFromSq() != action.getToSq()){ //checks that the action is not an initial request action
             for(Move move: currentMoves){
@@ -115,29 +121,89 @@ public class EnvEncoder {
                             case 4-> Piece.PieceType.KNIGHT;
                             default -> throw new IllegalArgumentException("Unexpected value: " + action.getPromotion());
                         }){
-                            currentPlayer = chessBoard.getCurrentPlayer();
                             if(currentPlayer){
                                 move.rotateMove();
                             }
+                            System.out.printf("%-10s %-8s %-6s%n", index, currentPlayer, move);
                             chessBoard.updateState(move);
+
+                            int kCount = 0;
+                            for (Piece piece : this.chessBoard.getPiecesOnBoard()) { //TODO: lines to delete
+                                if (piece.getPieceType() == KING) {
+                                    kCount++;
+                                }
+                            }
+                            if(kCount < 2){
+                                System.out.println("Sone king missing: " + kCount);
+                            }
+
+                            break;
+
                         }
+
                     }
                     else{
-                        currentPlayer = chessBoard.getCurrentPlayer();
-                        System.out.println(chessBoard.getCurrentPlayer());
                         if(currentPlayer){
                             move.rotateMove();
                         }
-                        System.out.printf("%-10s %-8s%n", currentPlayer, move);
+                        System.out.printf("%-10s %-8s %-6s%n", index, currentPlayer, move);
 
                         chessBoard.updateState(move);
+
+                        int kCount = 0;
+                        for (Piece piece : this.chessBoard.getPiecesOnBoard()) { //TODO: lines to delete
+                            if (piece.getPieceType() == KING) {
+                                kCount++;
+                            }
+                        }
+                        if(kCount < 2){
+                            //show the previous state
+                            ChessBoard prevMove1 = new ChessBoard(this.chessBoard);
+                            if (prevMove1.removeLastMoveTaken()) {
+                                LinkedList<Move> moves = prevMove1.getAllMovesTaken();
+                                prevMove1 = new ChessBoard();
+                                for (Move move_ : moves) {
+                                    prevMove1.updateState(move_);
+                                }
+                                prevMove1.calculateAllLegalMoves();//TODO: debugging lines to remove
+                            }
+
+                            ChessBoard prevMove2 = new ChessBoard(prevMove1);
+                            if (prevMove2.removeLastMoveTaken()) {
+                                LinkedList<Move> moves = prevMove2.getAllMovesTaken();
+                                prevMove2 = new ChessBoard();
+                                for (Move move_ : moves) {
+                                    prevMove2.updateState(move_);
+                                }
+                                prevMove2.calculateAllLegalMoves();//TODO: debugging lines to remove
+                            }
+
+                            System.out.println("Sone king missing: " + kCount);
+                        }
+
                         break;
                     }
                 }
             }
         }
 
-        currentMoves = getExpandedLegalMoves();
+        try{
+            currentMoves = getExpandedLegalMoves();
+        }
+        catch(Exception e){
+            System.out.println("Exception King Piece not present"); //TODO: debugging lines to remove
+            int sq_from = action.getFromSq();
+            int sq_to = action.getToSq();
+            int sq_k = -1;
+            for(Piece piece: this.chessBoard.getPiecesTaken()){
+                if(piece.getPieceType() == Piece.PieceType.KING){
+                    sq_k = piece.getPosition().flatten();
+                }
+            }
+
+            System.out.printf("%-10s %-8s %-6s%n", "from sq move: " + sq_from, "to sq move: " + sq_to, "position king: " + sq_k);
+
+        }
         updateRewards();
         updatePlanes();
         pcs.firePropertyChange("position", null, null);
@@ -192,7 +258,6 @@ public class EnvEncoder {
                 currentMoves.add(epKnight);
                 currentMoves.add(epRook);
                 currentMoves.add(epBishop);
-                break;
             }
         }
         return currentMoves;

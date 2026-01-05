@@ -18,7 +18,7 @@ public class RlEnvService extends RLEnvGrpc.RLEnvImplBase {
         envs = new EnvEncoder[numEnv];
 
         for (int i = 0; i < numEnv; i++) {
-            envs[i] = new EnvEncoder();
+            envs[i] = new EnvEncoder(i);
         }
     }
 
@@ -34,7 +34,7 @@ public class RlEnvService extends RLEnvGrpc.RLEnvImplBase {
                 count++;
                 try {
                     System.out.println("Batch number " + count);
-                    System.out.printf("%-10s %-8s%n", "Player", "Move");
+                    System.out.printf("%-10s %-8s %-6s%n", "Index", "Player", "Move");
                     System.out.println("----------------------------");
                     int n = envs.length;
 
@@ -51,13 +51,11 @@ public class RlEnvService extends RLEnvGrpc.RLEnvImplBase {
                         envs[i].step(req.getAction(i));
                         //System.out.println("Server call number " + count + " on env number: " + i);
 
-                        // add encoded state
-                        resp.addStates(envs[i].toEnvStateResponse());
-
-                        // optional: auto-reset if done
-                        if (envs[i].isDone()) { //TODO: remove resets from the AI
+                        if (envs[i].isDone()) {
                             envs[i].reset();
                         }
+                        // add encoded state
+                        resp.addStates(envs[i].toEnvStateResponse());
                     }
 
                     responseObserver.onNext(resp.build());

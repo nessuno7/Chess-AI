@@ -249,7 +249,7 @@ public class ChessBoard {
     public TreeSet<Coordinate> getAllThreatendCoords(boolean white) {
         // color of the pieces you want
         // to see the scope (usually it is going to be !this.white)
-        TreeSet<Coordinate> threatenedCoords = new TreeSet<Coordinate>();
+        TreeSet<Coordinate> threatenedCoords = new TreeSet<>();
 
         for (Piece piece : this.piecesOnBoard) {
             if (piece.isWhite() == white) {
@@ -334,6 +334,7 @@ public class ChessBoard {
     }
 
     public boolean simulateMove(Move move) {
+        String prev = printPreviousStateMove();
         this.updateState(move);
         for (Piece piece : this.piecesOnBoard) {
             if (piece.getPieceType() == KING
@@ -342,9 +343,21 @@ public class ChessBoard {
                 return !kingPiece.isInCheck(this);
             }
         }
+        System.out.println("move just done: " + move.toString()); //TODO: remove debugging tool
+        System.out.println("Previous state move: " + prev);
 
-        System.out.print("Wait");
         throw new IllegalArgumentException("There is no King Piece");
+    }
+
+    public String printPreviousStateMove(){ //TODO: debugging tool
+        try{
+            Move prev = this.allMovesTaken.getLast();
+            return prev.toString();
+        }
+        catch(Exception e){
+            return "";
+        }
+
     }
 
     public void rotateCoords() {
