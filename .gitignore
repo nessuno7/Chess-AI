@@ -19,6 +19,7 @@ __pycache__/
 *.pyo
 .venv/
 venv/
+/python-training/src/ac_checkpoint.pth
 
 # =====================
 # OS / Misc

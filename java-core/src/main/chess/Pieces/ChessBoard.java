@@ -334,7 +334,6 @@ public class ChessBoard {
     }
 
     public boolean simulateMove(Move move) {
-        String prev = printPreviousStateMove();
         this.updateState(move);
         for (Piece piece : this.piecesOnBoard) {
             if (piece.getPieceType() == KING
@@ -343,21 +342,8 @@ public class ChessBoard {
                 return !kingPiece.isInCheck(this);
             }
         }
-        System.out.println("move just done: " + move.toString()); //TODO: remove debugging tool
-        System.out.println("Previous state move: " + prev);
 
         throw new IllegalArgumentException("There is no King Piece");
-    }
-
-    public String printPreviousStateMove(){ //TODO: debugging tool
-        try{
-            Move prev = this.allMovesTaken.getLast();
-            return prev.toString();
-        }
-        catch(Exception e){
-            return "";
-        }
-
     }
 
     public void rotateCoords() {
@@ -383,7 +369,7 @@ public class ChessBoard {
             return 5;//draw by repetition
         }
 
-        if(numberMovesNoPiecesTaken >= 50){
+        if(numberMovesNoPiecesTaken >= 200){ //because AI takes a lot of random moves, min moves where no pieces are taken increases
             this.allLegalMoves.clear();
             return 4; //draw for the 50 move rule
         }

@@ -33,9 +33,8 @@ public class RlEnvService extends RLEnvGrpc.RLEnvImplBase {
             public void onNext(StepRequest req) {
                 count++;
                 try {
-                    System.out.println("Batch number " + count);
+                    System.out.println("BATCH NUMBER: " + count);
                     System.out.printf("%-10s %-8s %-6s%n", "Index", "Player", "Move");
-                    System.out.println("----------------------------");
                     int n = envs.length;
 
                     StepResponse.Builder resp = StepResponse.newBuilder()
@@ -57,8 +56,8 @@ public class RlEnvService extends RLEnvGrpc.RLEnvImplBase {
                         // add encoded state
                         resp.addStates(envs[i].toEnvStateResponse());
                     }
-
                     responseObserver.onNext(resp.build());
+                    System.out.println("----------------------------");
                 } catch (Exception e) {
                     e.printStackTrace();
                     responseObserver.onError(

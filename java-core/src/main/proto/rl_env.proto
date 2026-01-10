@@ -14,9 +14,6 @@ message StepRequest {
 
   // One move per board (env)
   repeated ProtoMove action = 2;
-
-  // Optional: if true for env i, server resets env i before applying action[i]
-  repeated bool reset = 3;
 }
 
 message ProtoMove {
@@ -34,13 +31,8 @@ message EnvState{
   // Observation per env: here we assume a fixed feature vector
   Observation obs = 1; //an array for each env
 
-  bool side = 2; //true for white and false for black
-
   //reward(one for each env)
-  float reward = 3;
-
-  //one for each env
-  bool done = 4;
+  float reward = 2;
 
   // array of legal moves
   repeated ProtoMove moves = 5;

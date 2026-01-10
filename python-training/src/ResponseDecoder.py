@@ -6,7 +6,6 @@ from typing import Tuple
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 GENERATED_DIR = os.path.join(BASE_DIR, "..", "generated")
-
 sys.path.append(GENERATED_DIR)
 
 import rl_env_pb2 as pb
@@ -15,7 +14,6 @@ import rl_env_pb2_grpc as pb_grpc
 OBS_DIM = 768
 PROMO_V = 5
 N_SQ = 64
-
 
 class ResponseDecoder:
     def __init__(self, response: pb.StepResponse, device):
@@ -91,35 +89,7 @@ class ResponseDecoder:
 
         return rewards
 
-    def getWhiteTensor(self ) -> torch.Tensor:
-        whites = torch.empty(
-            (self.num_envs,),
-            dtype=torch.bool,
-            device=self.device
-        )
 
-        for i, state in enumerate(self.envs):
-            whites[i] = bool(state.size)
-
-        return whites
-
-    def getDoneTensor(self) -> torch.Tensor:
-        dones = torch.empty(
-            (self.num_envs,),
-            dtype=torch.bool,
-            device=self.device
-        )
-
-        for i, state in enumerate(self.envs):
-            dones[i] = state.done
-
-        return dones
-
-    def getNextResets(self) -> list:
-        list_resets = []
-        for env in self.envs:
-            list_resets.append(env.reward == -0.5 or env.reward == 0.0)
-        return list_resets
 
 
 

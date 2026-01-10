@@ -1,14 +1,11 @@
-import os
 import sys
-import random
 from dataclasses import dataclass
 from typing import List, Tuple
+import os
 
 import numpy as np
 import torch
 import torch.nn as nn
-#import torch.nn.functional as F
-import grpc
 
 # --- import generated protobuf stubs ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -18,17 +15,16 @@ sys.path.append(GENERATED_DIR)
 import rl_env_pb2 as pb
 import rl_env_pb2_grpc as pb_grpc
 
-
 # =========================
-# Remote env wrapper (bidirectional streaming using request iterator)
+# Remote env wrapper and message decoder (bidirectional streaming using request iterator)
 # ========================
-from RemoteChessEnv import RemoteChessEnv
 import ResponseDecoder as rs
+from RemoteChessEnv import RemoteChessEnv
+
+
 # =========================
 # Actor-Critic: score legal moves + value(obs)
 # =========================
-
-
 class ActorCritic(nn.Module):
     """
     Actor: scores each legal move (variable-length list) using (obs + move features)
@@ -84,56 +80,10 @@ class ActorCritic(nn.Module):
 # Utilities: pad legal moves, sample only legal moves
 # =========================
 
-from RemoteChessEnv import RemoteChessEnv
-
-
-
-
-
-""" 
-def envstate_to_numpy_obs(env_state: pb.EnvState) -> np.ndarray: already in ResponseDecoder: getEnvObs
-    # EnvState.obs is a repeated float
-    return np.asarray(env_state.obs, dtype=np.float32)
-
-
-
-already in RespondeDecoder: getLegalMovesTensors
-def pad_legal_moves(
-        legal_moves_batch: List[List[pb.ProtoMove]],
-        device: str,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    
-    legal_moves_batch: length B, each element is list[ProtoMove] of variable length
-    Returns:
-      moves_from/to/promo: Long tensors [B, Kmax]
-      mask: Bool tensor [B, Kmax] True for real moves
-    
-    B = len(legal_moves_batch)
-    Kmax = max(len(m) for m in legal_moves_batch)
-    if Kmax == 0:
-        raise RuntimeError("At least one env returned 0 legal moves (unexpected).")
-
-    moves_from = torch.zeros((B, Kmax), dtype=torch.long, device=device)
-    moves_to   = torch.zeros((B, Kmax), dtype=torch.long, device=device)
-    moves_promo= torch.zeros((B, Kmax), dtype=torch.long, device=device)
-    mask       = torch.zeros((B, Kmax), dtype=torch.bool, device=device)
-
-    for b in range(B):
-        lm = legal_moves_batch[b]
-        for k, m in enumerate(lm):
-            moves_from[b, k] = int(m.from_sq)
-            moves_to[b, k] = int(m.to_sq)
-            # promotion is an enum in proto; in python it's an int
-            moves_promo[b, k] = int(m.promotion)
-            mask[b, k] = True
-
-    return moves_from, moves_to, moves_promo, mask
-"""
-
 @torch.no_grad()
 def select_actions(
         model: ActorCritic,
-        decoder: rs.ResponseDecoder
+        decoder: rs.ResponseDecoder,
 ) -> Tuple[List[pb.ProtoMove], torch.Tensor, torch.Tensor, torch.Tensor, Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]:
     """
     Returns:
@@ -144,7 +94,7 @@ def select_actions(
       padded_move_tensors: (moves_from, moves_to, moves_promo, mask) for later PPO update
     """
 
-    obs = decoder.getObservationMatrixTensor()
+    obs = decoder.getEnvObs()
     moves_from, moves_to, moves_promo, mask = decoder.getLegalMovesTensors()
 
     logits = model.move_logits(obs, moves_from, moves_to, moves_promo)  # [B, K]
@@ -211,7 +161,7 @@ def compute_gae(rewards, dones, values, next_value, gamma=0.99, lam=0.95):
 def ppo_train(
         host="localhost:50051",
         num_envs=10,
-        total_updates=2000,
+        total_updates=200,
         rollout_steps=128,      # T
         minibatch_size=256,
         ppo_epochs=4,
@@ -228,12 +178,25 @@ def ppo_train(
     model = ActorCritic(obs_dim=rs.OBS_DIM).to(device)
     optim = torch.optim.Adam(model.parameters(), lr=lr)
 
+    ckpt_path = "ac_checkpoint.pth"
+    start_update = 0
+
+    if os.path.exists(ckpt_path):
+        checkpoint = torch.load(ckpt_path, map_location=device)
+        model.load_state_dict(checkpoint["model_state"])
+        optim.load_state_dict(checkpoint["optimizer_state"])
+
+        start_update = int(checkpoint.get("update", 0))
+        print(f"Loaded checkpoint. Already trained updates={start_update}")
+    else:
+        print("Training from scratch for first startup")
+        #raise FileNotFoundError("Could not find checkpoint file")
+
     # Prime env (get first response)
     resp = rs.ResponseDecoder(env.reset(), device)
 
-    resets = resp.getNextResets()
-
-    for update in range(total_updates):
+    end_update = start_update + total_updates
+    for update in range(start_update, end_update):
         # --- Collect rollout of length T across B envs ---
         obs_buf = []
         rewards_buf = []
@@ -248,38 +211,34 @@ def ppo_train(
         moves_promo_list = []
         mask_list = []
 
-        #obs_np_list = resp.getObservationMatrix()
-
         for t in range(rollout_steps):
-            chosen_moves, action_idx, logprob, value, (mf, mt, mp, msk) = select_actions(
+            #appends observation from previous state
+            obs_t = resp.getObservationMatrixTensor()
+
+            #chooses actions
+            chosen_moves, action_id, logprob, value, (mf, mt, mp, msk) = select_actions(
                 model, resp
             )
 
-            # step env
-            resp = rs.ResponseDecoder(env.step(chosen_moves, resets=resets), device=device)
-            resets = resp.getNextResets()
-
-            #rewards = torch.tensor([s.reward for s in resp2.env], dtype=torch.float32, device=device)  # [B]
-            #dones = torch.tensor([s.done for s in resp2.env], dtype=torch.bool, device=device)         # [B]
-            rewards = resp.getRewardTensor()
-            dones = resp.getDoneTensor()
-
-            # store
-            obs_buf.append(resp.getObservationMatrixTensor())  # [B, obs_dim]
-            rewards_buf.append(rewards)
-            dones_buf.append(dones)
+            # data for step k
+            obs_buf.append(obs_t)  # [B, obs_dim]
             values_buf.append(value)
             logprob_buf.append(logprob)
-            action_idx_buf.append(action_idx)
-
+            action_idx_buf.append(action_id)
             moves_from_list.append(mf)
             moves_to_list.append(mt)
             moves_promo_list.append(mp)
             mask_list.append(msk)
 
-            # advance
-            #resp = resp2
-            #obs_np_list = [envstate_to_numpy_obs(s) for s in resp.env]
+            #now step k+1
+            resp = rs.ResponseDecoder(env.step(chosen_moves), device=device)
+
+            #rewards for step (k+1)-1
+            rewards_t = resp.getRewardTensor()
+            rewards_buf.append(rewards_t)
+
+            dones_t = (rewards_t == 1) | (rewards_t == -0.02)
+            dones_buf.append(dones_t)
 
         # bootstrap value for GAE
         with torch.no_grad():
@@ -400,11 +359,20 @@ def ppo_train(
         mean_done = dones_t.float().mean().item()
         print(f"update={update:04d} mean_step_reward={mean_reward:+.4f} done_rate={mean_done:.3f} Kmax={Kmax_global}")
 
+    #save and close the model
+    torch.save(
+        {
+            "model_state": model.state_dict(),
+            "optimizer_state": optim.state_dict(),
+            "update": end_update,   # total number of updates trained so far
+            "lr": lr,
+        },
+        ckpt_path
+    )
+    print(f"Saved checkpoint to {ckpt_path} at update={end_update}.")
     env.close()
 
-
 if __name__ == "__main__":
-    # Adjust host/num_envs to match your Java server
     ppo_train(host="localhost:50051", num_envs=10)
 
 
