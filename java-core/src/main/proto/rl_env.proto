@@ -5,10 +5,52 @@ option java_multiple_files =  true;
 
 option java_outer_classname = "RlProto";
 
+/*
+############################################
+UNSUPERVISED LEARNING SERVER
+############################################
+*/
 service RLEnv {
   rpc Rollout(stream StepRequest) returns (stream StepResponse);
 }
 
+
+
+/*
+############################################
+SUPERVISED LEARNING THROUGH CHESS PUZZLES
+############################################
+*/
+service ProblemsEnv {
+  // Start a new episode the fen of the initial chessboard states
+  rpc Init(InitRequest) returns (StepResponse); //uses multiple states solving the same problem
+
+  // Apply a client-chosen move and return the new state + next possible moves
+  rpc Step(stream StepRequest) returns (stream StepResponse);
+
+  rpc Close(CloseRequest) returns (CloseResponse); //ending communication channel once problem is solved
+}
+
+message InitRequest{
+  uint32 num_envs = 1; //number of envs that try to solve the chess puzzle in parallel
+  string fen = 2; //fen of the chessboard to reconstruct the object, one fen because all envs try to solve the puzzle
+}
+
+message CloseRequest{
+  bool close = 1; //set to true if wanna close communication
+}
+
+message CloseResponse{
+  bool close = 1; //set to true if close is
+}
+
+
+
+/*
+############################################
+PYTHON RL REQUESTS
+############################################
+*/
 message StepRequest {
   uint32 num_envs = 1;
 
@@ -22,6 +64,13 @@ message ProtoMove {
   uint32 promotion = 3;   // 0=none,1=Q,2=R,3=B,4=N
 }
 
+
+
+/*
+############################################
+JAVA SERVER CHESS LOGIC
+############################################
+*/
 message Observation{
   uint32 dimension = 1; //dimension of the Plane array: 768
   repeated float observationPoints = 2; //each number in the plane flattened array

@@ -94,7 +94,7 @@ def select_actions(
       padded_move_tensors: (moves_from, moves_to, moves_promo, mask) for later PPO update
     """
 
-    obs = decoder.getEnvObs()
+    obs = decoder.getObservationMatrixTensor()
     moves_from, moves_to, moves_promo, mask = decoder.getLegalMovesTensors()
 
     logits = model.move_logits(obs, moves_from, moves_to, moves_promo)  # [B, K]
@@ -154,11 +154,11 @@ def compute_gae(rewards, dones, values, next_value, gamma=0.99, lam=0.95):
     return adv, returns
 
 
-# =========================
-# Main PPO loop
-# =========================
+# ===============================
+# UNSUPERVISED LEARNING PPO LOOP
+# ===============================
 
-def ppo_train(
+def ppo_train_unsupervised(
         host="localhost:50051",
         num_envs=10,
         total_updates=200,
@@ -372,8 +372,250 @@ def ppo_train(
     print(f"Saved checkpoint to {ckpt_path} at update={end_update}.")
     env.close()
 
+
+# ===================================
+#           SUPERVISED LEARNING
+# ===================================
+
+from supervised_learning.lichessProblemsFetcher import ProblemIterator, intToMove, moveToInt
+from supervised_learning.ProblemEnv import RemoteProblemsEnv
+
+
+def ppo_train_supervised(
+        host="localhost:50051",
+        num_envs=10,
+        total_updates=200,
+        rollout_steps=128,      # T
+        minibatch_size=256,
+        ppo_epochs=4,
+        gamma=0.99,
+        gae_lambda=0.95,
+        clip_eps=0.2,
+        vf_coef=0.5,
+        ent_coef=0.01,
+        lr=3e-4,
+        device=None,
+        skip_n_problems = 0
+):
+    device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+    env = RemoteProblemsEnv(num_envs=num_envs, host=host)
+    model = ActorCritic(obs_dim=rs.OBS_DIM).to(device)
+    optim = torch.optim.Adam(model.parameters(), lr=lr)
+    iterator = ProblemIterator(skip=skip_n_problems)
+
+    ckpt_path = "ac_checkpoint.pth"
+    start_update = 0
+
+    if os.path.exists(ckpt_path):
+        checkpoint = torch.load(ckpt_path, map_location=device)
+        model.load_state_dict(checkpoint["model_state"])
+        optim.load_state_dict(checkpoint["optimizer_state"])
+
+        start_update = int(checkpoint.get("update", 0))
+        print(f"Loaded checkpoint. Already trained updates={start_update}")
+    else:
+        print("Training from scratch for first startup")
+        #raise FileNotFoundError("Could not find checkpoint file")
+
+
+
+    end_update = start_update + total_updates
+    for update in range(start_update, end_update):
+        # --- Collect rollout of length T across B envs ---
+        obs_buf = []
+        rewards_buf = []
+        dones_buf = []
+        values_buf = []
+        logprob_buf = []
+        action_idx_buf = []
+
+        # store per-step padded legal sets (variable K each step), we'll repad later
+        moves_from_list = []
+        moves_to_list = []
+        moves_promo_list = []
+        mask_list = []
+
+
+        puzzleIndex, fen, puzzleMoves, puzzleRating = next(iterator)
+        #env.startMessage(fen) TODO: initMessage, will get Step Response as answer
+        # Prime env (get first response)
+        resp = rs.ResponseDecoder(env.reset(), device)
+
+        for t in range(puzzleMoves): #each step is one problem attempted to solve
+
+            #appends observation from previous state
+            obs_t = resp.getObservationMatrixTensor()
+
+            #chooses actions
+            chosen_moves, action_id, logprob, value, (mf, mt, mp, msk) = select_actions(
+                model, resp
+            )
+
+            # data for step k
+            obs_buf.append(obs_t)  # [B, obs_dim]
+            values_buf.append(value)
+            logprob_buf.append(logprob)
+            action_idx_buf.append(action_id)
+            moves_from_list.append(mf)
+            moves_to_list.append(mt)
+            moves_promo_list.append(mp)
+            mask_list.append(msk)
+
+            moves_string = [] #rewards increase exponentially with difficult, also give more emphasis to first move important
+            for i in range(num_envs):
+                if intToMove(mf[i], mt[i], mp[i]) == puzzleMoves[t]:
+                    rewards[i] ==
+                elif moveToInt(puzzleMoves[t])[0] == mf[i]: #if correct piece moves still give partial credit
+                else: #give negative reward for not correct move and give negative reward inversely proportion to distance from correct state at that move
+
+
+
+            #rewards for step (k+1)-1 TODO: switch reward to see if it equals to problem
+            rewards_buf.append(rewards_t)
+
+            dones_t =
+            dones_buf.append(dones_t)
+
+            #now step k+1
+            resp = rs.ResponseDecoder(env.step(chosen_moves), device=device)
+
+        # bootstrap value for GAE
+        with torch.no_grad():
+            next_obs = resp.getObservationMatrixTensor()
+            next_value = model.value(next_obs)  # [B]
+
+        rewards_t = torch.stack(rewards_buf, dim=0)  # [T, B]
+        dones_t = torch.stack(dones_buf, dim=0)      # [T, B]
+        values_t = torch.stack(values_buf, dim=0)    # [T, B]
+
+        adv_t, ret_t = compute_gae(rewards_t, dones_t, values_t, next_value, gamma=gamma, lam=gae_lambda)
+
+        # Flatten T,B -> N
+        T, B = rollout_steps, num_envs
+        obs_flat = torch.cat(obs_buf, dim=0)                 # [T*B, obs_dim]
+        old_logprob_flat = torch.cat(logprob_buf, dim=0)     # [T*B]
+        old_value_flat = torch.cat(values_buf, dim=0)        # [T*B]
+        action_idx_flat = torch.cat(action_idx_buf, dim=0)   # [T*B]
+        adv_flat = adv_t.reshape(T*B)
+        ret_flat = ret_t.reshape(T*B)
+
+        # Advantage normalization (common PPO trick)
+        adv_flat = (adv_flat - adv_flat.mean()) / (adv_flat.std() + 1e-8)
+
+        # --- Re-pad move tensors to a single Kmax across the whole rollout ---
+        Kmax_global = max(m.shape[1] for m in moves_from_list)
+
+        def repad(m_list, fill=0, dtype=torch.long):
+            out = []
+            for m in m_list:
+                if m.shape[1] == Kmax_global:
+                    out.append(m)
+                else:
+                    pad = torch.full((m.shape[0], Kmax_global - m.shape[1]), fill_value=fill, dtype=dtype, device=device)
+                    out.append(torch.cat([m, pad], dim=1))
+            return torch.cat(out, dim=0)  # [T*B, Kmax_global]
+
+        moves_from_flat = repad(moves_from_list, fill=0, dtype=torch.long)
+        moves_to_flat = repad(moves_to_list, fill=0, dtype=torch.long)
+        moves_promo_flat = repad(moves_promo_list, fill=0, dtype=torch.long)
+
+        def repad_mask(msk_list):
+            out = []
+            for msk in msk_list:
+                if msk.shape[1] == Kmax_global:
+                    out.append(msk)
+                else:
+                    pad = torch.zeros((msk.shape[0], Kmax_global - msk.shape[1]), dtype=torch.bool, device=device)
+                    out.append(torch.cat([msk, pad], dim=1))
+            return torch.cat(out, dim=0)
+
+        mask_flat = repad_mask(mask_list)  # [T*B, Kmax_global]
+
+        batch = RolloutBatch(
+            obs=obs_flat,
+            moves_from=moves_from_flat,
+            moves_to=moves_to_flat,
+            moves_promo=moves_promo_flat,
+            mask=mask_flat,
+            action_idx=action_idx_flat,
+            old_logprob=old_logprob_flat,
+            returns=ret_flat,
+            advantage=adv_flat,
+            old_value=old_value_flat,
+        )
+
+        # --- PPO update ---
+        N = T * B
+        idxs = np.arange(N)
+
+        for epoch in range(ppo_epochs):
+            np.random.shuffle(idxs)
+
+            for start in range(0, N, minibatch_size):
+                mb = idxs[start:start + minibatch_size]
+                mb = torch.tensor(mb, dtype=torch.long, device=device)
+
+                obs_mb = batch.obs[mb]                # [M, obs_dim]
+                mf_mb = batch.moves_from[mb]          # [M, K]
+                mt_mb = batch.moves_to[mb]
+                mp_mb = batch.moves_promo[mb]
+                msk_mb = batch.mask[mb]               # [M, K]
+                act_mb = batch.action_idx[mb]         # [M]
+                old_lp_mb = batch.old_logprob[mb]     # [M]
+                adv_mb = batch.advantage[mb]          # [M]
+                ret_mb = batch.returns[mb]            # [M]
+                old_v_mb = batch.old_value[mb]        # [M]
+
+                # New policy logits over the SAME legal move set
+                logits = model.move_logits(obs_mb, mf_mb, mt_mb, mp_mb)  # [M, K]
+                logits = logits.masked_fill(~msk_mb, float("-inf"))
+                dist = torch.distributions.Categorical(logits=logits)
+
+                new_lp = dist.log_prob(act_mb)  # [M]
+                entropy = dist.entropy().mean()
+
+                ratio = (new_lp - old_lp_mb).exp()
+                surr1 = ratio * adv_mb
+                surr2 = torch.clamp(ratio, 1.0 - clip_eps, 1.0 + clip_eps) * adv_mb
+                policy_loss = -torch.min(surr1, surr2).mean()
+
+                # Value loss (optionally clip like PPO tutorial)
+                new_v = model.value(obs_mb)
+                v_clipped = old_v_mb + (new_v - old_v_mb).clamp(-clip_eps, clip_eps)
+                v_loss1 = (new_v - ret_mb).pow(2)
+                v_loss2 = (v_clipped - ret_mb).pow(2)
+                value_loss = 0.5 * torch.max(v_loss1, v_loss2).mean()
+
+                loss = policy_loss + vf_coef * value_loss - ent_coef * entropy
+
+                optim.zero_grad()
+                loss.backward()
+                nn.utils.clip_grad_norm_(model.parameters(), 0.5)
+                optim.step()
+
+        # Logging
+        mean_reward = rewards_t.mean().item()
+        mean_done = dones_t.float().mean().item()
+        print(f"update={update:04d} mean_step_reward={mean_reward:+.4f} done_rate={mean_done:.3f} Kmax={Kmax_global}")
+
+    #save and close the model
+    torch.save(
+        {
+            "model_state": model.state_dict(),
+            "optimizer_state": optim.state_dict(),
+            "update": end_update,   # total number of updates trained so far
+            "lr": lr,
+        },
+        ckpt_path
+    )
+    print(f"Saved checkpoint to {ckpt_path} at update={end_update}.")
+    env.close()
+
+
 if __name__ == "__main__":
-    ppo_train(host="localhost:50051", num_envs=10)
+    ppo_train_unsupervised(host="localhost:50051", num_envs=10)
+
+
 
 
 

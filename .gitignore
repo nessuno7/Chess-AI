@@ -20,6 +20,7 @@ __pycache__/
 .venv/
 venv/
 /python-training/src/ac_checkpoint.pth
+/python-training/src/supervised_learning/lichess_db_puzzle.csv
 
 # =====================
 # OS / Misc
