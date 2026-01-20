@@ -129,9 +129,10 @@ class RolloutBatch:
     returns: torch.Tensor             # [T*B]
     advantage: torch.Tensor           # [T*B]
     old_value: torch.Tensor           # [T*B]
+    valid: torch.Tensor
 
 
-def compute_gae(rewards, dones, values, next_value, gamma=0.99, lam=0.95):
+def compute_gae_unsupervised(rewards, dones, values, next_value, gamma=0.99, lam=0.95):
     """
     rewards: [T, B]
     dones:   [T, B] bool
@@ -151,6 +152,65 @@ def compute_gae(rewards, dones, values, next_value, gamma=0.99, lam=0.95):
         adv[t] = last_gae
 
     returns = adv + values
+    return adv, returns
+"""
+def compute_gae_supervised(rewards, valids, dones, values, next_value, gamma=0.99, lam=0.95):
+    #dones_shifted = torch.roll(dones, shifts=1, dims=0) #shift all envs by one step
+    dones_shifted = torch.zeros_like(valids)
+    dones_shifted[1:] = valids[:-1]
+    valid = ~(dones_shifted & valids) #~dones_shifted implies dones logically equivalent to valid
+
+    T, B = rewards.shape
+
+    adv = torch.zeros((T, B), dtype=torch.float32, device=values.device)
+    last_gae = torch.zeros((B,), dtype=torch.float32, device=values.device)
+
+    for t in reversed(range(T)):
+        nonterminal = (~dones[t]).float()
+        next_v = next_value if t == T - 1 else values[t + 1] #if it is the last index it gets the last value from prev batch
+        delta = rewards[t] + gamma * next_v * nonterminal - values[t]
+        last_gae = delta + gamma * lam * last_gae * nonterminal
+        vmask = valid[t].float()
+        adv[t] = last_gae * vmask
+
+    returns = (adv + values) * valid.float()
+    return adv, returns, valid
+"""
+
+def compute_gae_supervised(rewards, valids, dones, values, next_value, gamma=0.99, lam=0.95):
+    T, B = rewards.shape
+    device = values.device
+
+    adv = torch.zeros((T, B), dtype=torch.float32, device=device)
+    last_gae = torch.zeros((B,), dtype=torch.float32, device=device)
+
+    for t in reversed(range(T)):
+        vmask = valids[t].float()  # whether this step exists
+
+        # If this step is invalid/padding, reset recursion for those env lanes
+        last_gae = last_gae * vmask
+
+        # Determine whether we are allowed to bootstrap/propagate beyond step t
+        if t == T - 1:
+            next_v = next_value
+            next_valid = torch.ones_like(vmask)  # no t+1 inside buffer
+        else:
+            next_v = values[t + 1]
+            next_valid = valids[t + 1].float()
+
+        nonterminal = (~dones[t]).float()
+
+        # Only bootstrap into next state if:
+        # - current step is nonterminal, and
+        # - the next step is valid (same puzzle segment)
+        cont = nonterminal * next_valid
+
+        delta = rewards[t] + gamma * next_v * cont - values[t]
+        last_gae = delta + gamma * lam * cont * last_gae
+
+        adv[t] = last_gae * vmask  # zero for invalid steps
+
+    returns = (adv + values) * valids.float()
     return adv, returns
 
 
@@ -249,7 +309,7 @@ def ppo_train_unsupervised(
         dones_t = torch.stack(dones_buf, dim=0)      # [T, B]
         values_t = torch.stack(values_buf, dim=0)    # [T, B]
 
-        adv_t, ret_t = compute_gae(rewards_t, dones_t, values_t, next_value, gamma=gamma, lam=gae_lambda)
+        adv_t, ret_t = compute_gae_unsupervised(rewards_t, dones_t, values_t, next_value, gamma=gamma, lam=gae_lambda)
 
         # Flatten T,B -> N
         T, B = rollout_steps, num_envs
@@ -385,7 +445,7 @@ def ppo_train_supervised(
         host="localhost:50051",
         num_envs=10,
         total_updates=200,
-        rollout_steps=128,      # T
+        numberProblemAttempts=40,      # attempts 40 different problems
         minibatch_size=256,
         ppo_epochs=4,
         gamma=0.99,
@@ -403,7 +463,7 @@ def ppo_train_supervised(
     optim = torch.optim.Adam(model.parameters(), lr=lr)
     iterator = ProblemIterator(skip=skip_n_problems)
 
-    ckpt_path = "ac_checkpoint.pth"
+    ckpt_path = "supervised_checkpoint.pth"
     start_update = 0
 
     if os.path.exists(ckpt_path):
@@ -425,6 +485,7 @@ def ppo_train_supervised(
         obs_buf = []
         rewards_buf = []
         dones_buf = []
+        valid_buf = []
         values_buf = []
         logprob_buf = []
         action_idx_buf = []
@@ -436,48 +497,67 @@ def ppo_train_supervised(
         mask_list = []
 
 
-        puzzleIndex, fen, puzzleMoves, puzzleRating = next(iterator)
-        #env.startMessage(fen) TODO: initMessage, will get Step Response as answer
-        # Prime env (get first response)
-        resp = rs.ResponseDecoder(env.reset(), device)
+        for nProb in range(numberProblemAttempts): #loop pver the number of porblme you want to solve per batch
 
-        for t in range(puzzleMoves): #each step is one problem attempted to solve
+            puzzleIndex, fen, puzzleMoves, puzzleRating = next(iterator)
+            #env.startMessage(fen) TODO: initMessage, will get Step Response as answer
+            # Prime env (get first response)
+            resp = rs.ResponseDecoder(env.reset(), device)
+            continue_rewards =[True for _ in range(num_envs)]
 
-            #appends observation from previous state
-            obs_t = resp.getObservationMatrixTensor()
+            for t in range(len(puzzleMoves)): #each step is one problem attempted to solve
 
-            #chooses actions
-            chosen_moves, action_id, logprob, value, (mf, mt, mp, msk) = select_actions(
-                model, resp
-            )
+                #appends observation from previous state
+                obs_t = resp.getObservationMatrixTensor()
 
-            # data for step k
-            obs_buf.append(obs_t)  # [B, obs_dim]
-            values_buf.append(value)
-            logprob_buf.append(logprob)
-            action_idx_buf.append(action_id)
-            moves_from_list.append(mf)
-            moves_to_list.append(mt)
-            moves_promo_list.append(mp)
-            mask_list.append(msk)
+                #chooses actions
+                chosen_moves, action_id, logprob, value, (mf, mt, mp, msk) = select_actions(
+                    model, resp
+                )
 
-            moves_string = [] #rewards increase exponentially with difficult, also give more emphasis to first move important
-            for i in range(num_envs):
-                if intToMove(mf[i], mt[i], mp[i]) == puzzleMoves[t]:
-                    rewards[i] ==
-                elif moveToInt(puzzleMoves[t])[0] == mf[i]: #if correct piece moves still give partial credit
-                else: #give negative reward for not correct move and give negative reward inversely proportion to distance from correct state at that move
+                # data for step k
+                obs_buf.append(obs_t)  # [B, obs_dim]
+                values_buf.append(value)
+                logprob_buf.append(logprob)
+                action_idx_buf.append(action_id)
+                moves_from_list.append(mf)
+                moves_to_list.append(mt)
+                moves_promo_list.append(mp)
+                mask_list.append(msk)
 
+                rewards_t = []
+                valid_t = []
 
+                for i in range(num_envs):
+                    if continue_rewards[i]:
+                        if intToMove(mf[i], mt[i], mp[i]) == puzzleMoves[t]:
+                            difficulty = min(1, puzzleRating/2500) #rewards increase linearly with difficulty () capped at 2000
+                            rewards_t.insert(i, (0.8*difficulty) +0.2) #0.1 min reward for easy puzzles, 1 max reward for hard puzzles
+                            valid_t.insert(i, False)
+                        elif moveToInt(puzzleMoves[t])[0] == mf[i]: #TODO: introduce partial credit
+                            valid_t.insert(i, True)
+                            rewards_t.insert(i, 0.0)
+                            continue_rewards[i] = False
+                        else: #TODO: give negative reward for not correct move and inversely proportion to distance from correct state at that move
+                            valid_t.insert(i, True)
+                            rewards_t.insert(i, -0.5)
+                            continue_rewards[i] = False
+                    else:
+                        rewards_t.insert(i, 0)
+                        valid_t.insert(i, True)
 
-            #rewards for step (k+1)-1 TODO: switch reward to see if it equals to problem
-            rewards_buf.append(rewards_t)
+                rewards_buf.append(rewards_t)
+                valid_buf.append(valid_t)
 
-            dones_t =
-            dones_buf.append(dones_t)
+                if t == len(puzzleMoves) - 1:
+                    dones_t = [False for _ in range(num_envs)]
+                else:
+                    dones_t = [True for _ in range(num_envs)]
 
-            #now step k+1
-            resp = rs.ResponseDecoder(env.step(chosen_moves), device=device)
+                dones_buf.append(dones_t)
+
+                #now step k+1
+                resp = rs.ResponseDecoder(env.step(chosen_moves), device=device)
 
         # bootstrap value for GAE
         with torch.no_grad():
@@ -485,13 +565,15 @@ def ppo_train_supervised(
             next_value = model.value(next_obs)  # [B]
 
         rewards_t = torch.stack(rewards_buf, dim=0)  # [T, B]
-        dones_t = torch.stack(dones_buf, dim=0)      # [T, B]
+        valid_t = torch.stack(valid_buf, dim=0)      # [T, B]
         values_t = torch.stack(values_buf, dim=0)    # [T, B]
+        dones_t = torch.stack(dones_buf, dim=0)
 
-        adv_t, ret_t = compute_gae(rewards_t, dones_t, values_t, next_value, gamma=gamma, lam=gae_lambda)
+        adv_t, ret_t = compute_gae_supervised(rewards=rewards_t, valids=valid_t, values=values_t, dones=dones_t, next_value=next_value)
 
         # Flatten T,B -> N
-        T, B = rollout_steps, num_envs
+        T, B = rewards_t.shape() #TODO: check len(rewards_t) is correct
+        valid_flat = valid_t.reshape(T * B).float()
         obs_flat = torch.cat(obs_buf, dim=0)                 # [T*B, obs_dim]
         old_logprob_flat = torch.cat(logprob_buf, dim=0)     # [T*B]
         old_value_flat = torch.cat(values_buf, dim=0)        # [T*B]
@@ -500,7 +582,14 @@ def ppo_train_supervised(
         ret_flat = ret_t.reshape(T*B)
 
         # Advantage normalization (common PPO trick)
-        adv_flat = (adv_flat - adv_flat.mean()) / (adv_flat.std() + 1e-8)
+        #adv_flat = (adv_flat - adv_flat.mean()) / (adv_flat.std() + 1e-8)
+        adv_flat = adv_t.reshape(T * B)
+        valid_idx = valid_flat > 0
+        valid_adv = adv_flat[valid_idx]
+        adv_mean = valid_adv.mean()
+        adv_std = valid_adv.std().clamp_min(1e-8)
+        adv_flat = (adv_flat - adv_mean) / adv_std
+        adv_flat = adv_flat * valid_flat
 
         # --- Re-pad move tensors to a single Kmax across the whole rollout ---
         Kmax_global = max(m.shape[1] for m in moves_from_list)
@@ -542,16 +631,18 @@ def ppo_train_supervised(
             returns=ret_flat,
             advantage=adv_flat,
             old_value=old_value_flat,
+            valid=valid_flat
         )
 
         # --- PPO update ---
-        N = T * B
-        idxs = np.arange(N)
+        valid_indices = torch.nonzero(valid_flat > 0, as_tuple=False).squeeze(1)  # [N_valid]
+        idxs = valid_indices.cpu().numpy()
+        N_valid = len(idxs)
 
         for epoch in range(ppo_epochs):
             np.random.shuffle(idxs)
 
-            for start in range(0, N, minibatch_size):
+            for start in range(0, N_valid, minibatch_size):
                 mb = idxs[start:start + minibatch_size]
                 mb = torch.tensor(mb, dtype=torch.long, device=device)
 
@@ -566,25 +657,30 @@ def ppo_train_supervised(
                 ret_mb = batch.returns[mb]            # [M]
                 old_v_mb = batch.old_value[mb]        # [M]
 
+                valid_mb = batch.valid[mb].float()    # [M]
+                den = valid_mb.sum().clamp_min(1.0)
+
+
                 # New policy logits over the SAME legal move set
                 logits = model.move_logits(obs_mb, mf_mb, mt_mb, mp_mb)  # [M, K]
                 logits = logits.masked_fill(~msk_mb, float("-inf"))
                 dist = torch.distributions.Categorical(logits=logits)
 
                 new_lp = dist.log_prob(act_mb)  # [M]
-                entropy = dist.entropy().mean()
+                entropy = (dist.entropy() * valid_mb).sum() / den
 
                 ratio = (new_lp - old_lp_mb).exp()
                 surr1 = ratio * adv_mb
                 surr2 = torch.clamp(ratio, 1.0 - clip_eps, 1.0 + clip_eps) * adv_mb
-                policy_loss = -torch.min(surr1, surr2).mean()
+                policy_loss = -(torch.min(surr1, surr2) * valid_mb).sum() / den
 
                 # Value loss (optionally clip like PPO tutorial)
                 new_v = model.value(obs_mb)
                 v_clipped = old_v_mb + (new_v - old_v_mb).clamp(-clip_eps, clip_eps)
                 v_loss1 = (new_v - ret_mb).pow(2)
                 v_loss2 = (v_clipped - ret_mb).pow(2)
-                value_loss = 0.5 * torch.max(v_loss1, v_loss2).mean()
+                value_loss = 0.5 * (torch.max(v_loss1, v_loss2) * valid_mb).sum() / den
+
 
                 loss = policy_loss + vf_coef * value_loss - ent_coef * entropy
 
@@ -611,9 +707,8 @@ def ppo_train_supervised(
     print(f"Saved checkpoint to {ckpt_path} at update={end_update}.")
     env.close()
 
-
 if __name__ == "__main__":
-    ppo_train_unsupervised(host="localhost:50051", num_envs=10)
+    ppo_train_supervised(host="localhost:50051", num_envs=10)
 
 
 

@@ -1,9 +1,15 @@
 import grpc
 import queue
 from typing import Optional, Iterator
+import os
+import sys
 
-import rl_pb2 as pb
-import rl_pb2_grpc as pb_grpc
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+GENERATED_DIR = os.path.join(BASE_DIR, "..", "generated")
+sys.path.append(GENERATED_DIR)
+
+import rl_env_pb2 as pb
+import rl_env_pb2_grpc as pb_grpc
 
 
 def request_generator(q: "queue.Queue[Optional[pb.StepRequest]]") -> Iterator[pb.StepRequest]:

@@ -7,4 +7,6 @@
 
 ## Next things to do
 - Create a way to play against the AI (modify game)
-- Interface with Lichess API for training AI by solving problems
+- Work in progress connect with database of lichess puzzles
+- Wrote supervised PPO train function with masking
+- TODO: write new java server side, update grp generated file for hava and python

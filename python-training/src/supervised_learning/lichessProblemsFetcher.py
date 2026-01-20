@@ -82,6 +82,8 @@ def formatMovesList(moves):
         moves_list.append(moveToInt(move))
     return moves_list
 
+
+
 if __name__ == "__main__":
     iterator = ProblemIterator()
     i, fen, moves, rating = next(iterator)
