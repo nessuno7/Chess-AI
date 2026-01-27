@@ -18,6 +18,11 @@ public class Coordinate implements Comparable<Coordinate> {
         this.column = initCoordinate.getColumn();
     }
 
+    public Coordinate(int flat){
+        this.column = flat%8;
+        this.row = (flat-column)/8;
+    }
+
     public int getRow() {
         return row;
     }

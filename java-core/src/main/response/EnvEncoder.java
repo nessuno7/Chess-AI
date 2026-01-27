@@ -83,12 +83,29 @@ public class EnvEncoder {
         currentPlayer = chessBoard.getCurrentPlayer();
     }
 
+    public void reset(String fen) throws Exception{
+        this.chessBoard = new ChessBoard();
+        this.chessBoard.setStateFen(fen);
+        this.piecePlaneArray = new Plane[6];
+        this.currentMoves = this.getExpandedLegalMoves();
+
+        for(int i=0; i<6; i++){
+            piecePlaneArray[i] = new Plane(Piece.PieceType.values()[i]);
+        }
+
+        updatePlanes();
+        done = false;
+        currentPlayer = chessBoard.getCurrentPlayer();
+    }
+
     public void step(rl.ProtoMove action) throws Exception{
         count ++;
         if (currentMoves == null || currentMoves.isEmpty()) {
             currentMoves = getExpandedLegalMoves();
         }
         currentPlayer = chessBoard.getCurrentPlayer();
+
+        ChessBoard prev_copy = new ChessBoard(this.chessBoard);
 
         if(action.getFromSq() != action.getToSq()){ //checks that the action is not an initial request action
             for(Move move: currentMoves){
@@ -118,9 +135,16 @@ public class EnvEncoder {
                     }
                 }
             }
+            throw new RuntimeException("No move found  is valid");
         }
 
-        currentMoves = getExpandedLegalMoves();
+        try{
+            currentMoves = getExpandedLegalMoves();
+        }
+        catch(IllegalArgumentException e){
+            System.out.println("Problem with king here?");
+        }
+
         updateRewards();
         updatePlanes();
         pcs.firePropertyChange("position", null, null);

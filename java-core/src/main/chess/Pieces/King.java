@@ -196,4 +196,11 @@ public class King extends Piece {
         return legalMoves;
     }
 
+    public void setLongCastleAllowed(boolean allowed){
+        this.isLongCastleAllowed = allowed;
+    }
+
+    public void setShortCastleAllowed(boolean allowed){
+        this.isShortCastleAllowed = allowed;
+    }
 }

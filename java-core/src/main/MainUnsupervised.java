@@ -4,12 +4,13 @@ import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import main.response.ChessBoardPanel;
 import main.response.EnvEncoder;
+import main.response.ProblemsEnvService;
 import main.response.RlEnvService;
 
 import javax.swing.*;
 import java.awt.*;
 
-class Main
+class MainUnsupervised
 {
     public static void main(String[] args) throws Exception {
         final int numEnv = 10;

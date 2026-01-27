@@ -108,7 +108,12 @@ def select_actions(
     # Convert idx -> actual ProtoMove
     chosen_moves = []
     for b in range(decoder.num_envs):
-        chosen_moves.append(decoder.envs[b].moves[idx[b].item()])
+        k = idx[b].item()
+        fr = moves_from[b, k].item()
+        to = moves_to[b, k].item()
+        pr = moves_promo[b, k].item()   # 0 = no promo (depending on your encoding)
+
+        chosen_moves.append((fr, to, pr))
 
     return chosen_moves, idx, logprob, value, (moves_from, moves_to, moves_promo, mask)
 
@@ -238,7 +243,7 @@ def ppo_train_unsupervised(
     model = ActorCritic(obs_dim=rs.OBS_DIM).to(device)
     optim = torch.optim.Adam(model.parameters(), lr=lr)
 
-    ckpt_path = "ac_checkpoint.pth"
+    ckpt_path = "unsupervised_checkpoint.pth"
     start_update = 0
 
     if os.path.exists(ckpt_path):
@@ -363,6 +368,7 @@ def ppo_train_unsupervised(
             returns=ret_flat,
             advantage=adv_flat,
             old_value=old_value_flat,
+            valid=None
         )
 
         # --- PPO update ---
@@ -433,6 +439,7 @@ def ppo_train_unsupervised(
     env.close()
 
 
+
 # ===================================
 #           SUPERVISED LEARNING
 # ===================================
@@ -445,7 +452,7 @@ def ppo_train_supervised(
         host="localhost:50051",
         num_envs=10,
         total_updates=200,
-        numberProblemAttempts=40,      # attempts 40 different problems
+        numberProblemAttempts=40,      # attempts 40 different problemsper batch
         minibatch_size=256,
         ppo_epochs=4,
         gamma=0.99,
@@ -502,7 +509,7 @@ def ppo_train_supervised(
             puzzleIndex, fen, puzzleMoves, puzzleRating = next(iterator)
             #env.startMessage(fen) TODO: initMessage, will get Step Response as answer
             # Prime env (get first response)
-            resp = rs.ResponseDecoder(env.reset(), device)
+            resp = rs.ResponseDecoder(env.reset_with_new_fen(fen), device)
             continue_rewards =[True for _ in range(num_envs)]
 
             for t in range(len(puzzleMoves)): #each step is one problem attempted to solve
@@ -515,6 +522,7 @@ def ppo_train_supervised(
                     model, resp
                 )
 
+                print(chosen_moves)
                 # data for step k
                 obs_buf.append(obs_t)  # [B, obs_dim]
                 values_buf.append(value)
@@ -530,11 +538,11 @@ def ppo_train_supervised(
 
                 for i in range(num_envs):
                     if continue_rewards[i]:
-                        if intToMove(mf[i], mt[i], mp[i]) == puzzleMoves[t]:
+                        if intToMove(square_from = chosen_moves[i][0], square_to = chosen_moves[i][1], promotion=chosen_moves[i][2]) == puzzleMoves[t]:
                             difficulty = min(1, puzzleRating/2500) #rewards increase linearly with difficulty () capped at 2000
                             rewards_t.insert(i, (0.8*difficulty) +0.2) #0.1 min reward for easy puzzles, 1 max reward for hard puzzles
                             valid_t.insert(i, False)
-                        elif moveToInt(puzzleMoves[t])[0] == mf[i]: #TODO: introduce partial credit
+                        elif moveToInt(puzzleMoves[t])[0] == chosen_moves[i][0]: #TODO: introduce partial credit
                             valid_t.insert(i, True)
                             rewards_t.insert(i, 0.0)
                             continue_rewards[i] = False

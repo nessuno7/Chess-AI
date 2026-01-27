@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0crl_env.proto\x12\x02rl\">\n\x0bStepRequest\x12\x10\n\x08num_envs\x18\x01 \x01(\r\x12\x1d\n\x06\x61\x63tion\x18\x02 \x03(\x0b\x32\r.rl.ProtoMove\">\n\tProtoMove\x12\x0f\n\x07\x66rom_sq\x18\x01 \x01(\r\x12\r\n\x05to_sq\x18\x02 \x01(\r\x12\x11\n\tpromotion\x18\x03 \x01(\r\";\n\x0bObservation\x12\x11\n\tdimension\x18\x01 \x01(\r\x12\x19\n\x11observationPoints\x18\x02 \x03(\x02\"V\n\x08\x45nvState\x12\x1c\n\x03obs\x18\x01 \x01(\x0b\x32\x0f.rl.Observation\x12\x0e\n\x06reward\x18\x02 \x01(\x02\x12\x1c\n\x05moves\x18\x05 \x03(\x0b\x32\r.rl.ProtoMove\">\n\x0cStepResponse\x12\x10\n\x08num_envs\x18\x01 \x01(\r\x12\x1c\n\x06states\x18\x02 \x03(\x0b\x32\x0c.rl.EnvState29\n\x05RLEnv\x12\x30\n\x07Rollout\x12\x0f.rl.StepRequest\x1a\x10.rl.StepResponse(\x01\x30\x01\x42\x0b\x42\x07RlProtoP\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0crl_env.proto\x12\x02rl\",\n\x0bInitRequest\x12\x10\n\x08num_envs\x18\x01 \x01(\r\x12\x0b\n\x03\x66\x65n\x18\x02 \x01(\t\"\x1d\n\x0c\x43loseRequest\x12\r\n\x05\x63lose\x18\x01 \x01(\x08\"\x1e\n\rCloseResponse\x12\r\n\x05\x63lose\x18\x01 \x01(\x08\">\n\x0bStepRequest\x12\x10\n\x08num_envs\x18\x01 \x01(\r\x12\x1d\n\x06\x61\x63tion\x18\x02 \x03(\x0b\x32\r.rl.ProtoMove\">\n\tProtoMove\x12\x0f\n\x07\x66rom_sq\x18\x01 \x01(\r\x12\r\n\x05to_sq\x18\x02 \x01(\r\x12\x11\n\tpromotion\x18\x03 \x01(\r\";\n\x0bObservation\x12\x11\n\tdimension\x18\x01 \x01(\r\x12\x19\n\x11observationPoints\x18\x02 \x03(\x02\"V\n\x08\x45nvState\x12\x1c\n\x03obs\x18\x01 \x01(\x0b\x32\x0f.rl.Observation\x12\x0e\n\x06reward\x18\x02 \x01(\x02\x12\x1c\n\x05moves\x18\x05 \x03(\x0b\x32\r.rl.ProtoMove\">\n\x0cStepResponse\x12\x10\n\x08num_envs\x18\x01 \x01(\r\x12\x1c\n\x06states\x18\x02 \x03(\x0b\x32\x0c.rl.EnvState29\n\x05RLEnv\x12\x30\n\x07Rollout\x12\x0f.rl.StepRequest\x1a\x10.rl.StepResponse(\x01\x30\x01\x32\x95\x01\n\x0bProblemsEnv\x12)\n\x04Init\x12\x0f.rl.InitRequest\x1a\x10.rl.StepResponse\x12-\n\x04Step\x12\x0f.rl.StepRequest\x1a\x10.rl.StepResponse(\x01\x30\x01\x12,\n\x05\x43lose\x12\x10.rl.CloseRequest\x1a\x11.rl.CloseResponseB\x0b\x42\x07RlProtoP\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -32,16 +32,24 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'rl_env_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'B\007RlProtoP\001'
-  _globals['_STEPREQUEST']._serialized_start=20
-  _globals['_STEPREQUEST']._serialized_end=82
-  _globals['_PROTOMOVE']._serialized_start=84
-  _globals['_PROTOMOVE']._serialized_end=146
-  _globals['_OBSERVATION']._serialized_start=148
-  _globals['_OBSERVATION']._serialized_end=207
-  _globals['_ENVSTATE']._serialized_start=209
-  _globals['_ENVSTATE']._serialized_end=295
-  _globals['_STEPRESPONSE']._serialized_start=297
-  _globals['_STEPRESPONSE']._serialized_end=359
-  _globals['_RLENV']._serialized_start=361
-  _globals['_RLENV']._serialized_end=418
+  _globals['_INITREQUEST']._serialized_start=20
+  _globals['_INITREQUEST']._serialized_end=64
+  _globals['_CLOSEREQUEST']._serialized_start=66
+  _globals['_CLOSEREQUEST']._serialized_end=95
+  _globals['_CLOSERESPONSE']._serialized_start=97
+  _globals['_CLOSERESPONSE']._serialized_end=127
+  _globals['_STEPREQUEST']._serialized_start=129
+  _globals['_STEPREQUEST']._serialized_end=191
+  _globals['_PROTOMOVE']._serialized_start=193
+  _globals['_PROTOMOVE']._serialized_end=255
+  _globals['_OBSERVATION']._serialized_start=257
+  _globals['_OBSERVATION']._serialized_end=316
+  _globals['_ENVSTATE']._serialized_start=318
+  _globals['_ENVSTATE']._serialized_end=404
+  _globals['_STEPRESPONSE']._serialized_start=406
+  _globals['_STEPRESPONSE']._serialized_end=468
+  _globals['_RLENV']._serialized_start=470
+  _globals['_RLENV']._serialized_end=527
+  _globals['_PROBLEMSENV']._serialized_start=530
+  _globals['_PROBLEMSENV']._serialized_end=679
 # @@protoc_insertion_point(module_scope)

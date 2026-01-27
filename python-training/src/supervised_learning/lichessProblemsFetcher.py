@@ -1,10 +1,10 @@
 import pandas as pd
 from sympy.multipledispatch.dispatcher import RaiseNotImplementedError
 
-CSV_PATH = "lichess_db_puzzle.csv"
+CSV_PATH = "supervised_learning\lichess_db_puzzle.csv"
 
 class ProblemIterator:
-    def __init__(self, skip):
+    def __init__(self, skip=0):
         self.file_iter = pd.read_csv(CSV_PATH, chunksize=50_000, skiprows=skip)
         self.chunk = None
         self.row_iter = None
@@ -35,7 +35,7 @@ class ProblemIterator:
 
 def moveToInt(move):
     int1 = ord(move[0]) - ord('a')
-    int2 = 7 - int(move[2])
+    int2 = 7 - int(move[1])
     square_from = 8*int2 + int1
     int1 = ord(move[2]) - ord('a')
     int2 = 7 - int(move[3])
@@ -56,15 +56,11 @@ def moveToInt(move):
     return square_from, square_to, promotion
 
 def intToCoord(coord):
-    string = []
-    string.append(chr(coord%8 + ord('a')))
-    string.append(str(int((coord - (coord%8))/8)))
+    string = [chr(coord % 8 + ord('a')), str(int((coord - (coord % 8)) / 8))]
     return ''.join(string)
 
 def intToMove(square_from, square_to, promotion):
-    string = []
-    string.append(intToCoord(square_from))
-    string.append(intToCoord(square_to))
+    string = [intToCoord(square_from), intToCoord(square_to)]
     if promotion != 0:
         if promotion == 1:
             string.append("q")

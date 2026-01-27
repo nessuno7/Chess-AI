@@ -104,6 +104,201 @@ public class ChessBoard {
         this.piecesOnBoard.add(blackPawn8);
     }
 
+    public void setStateFen(String fen){
+        char[] list = fen.toCharArray();
+        int index=0;
+        boolean position = true;
+        boolean color = true;
+        boolean castling = true;
+        boolean enpassant = true;
+        int coordinate=0;
+
+        this.piecesOnBoard.clear();
+        this.allMovesTaken.clear();
+        this.previousStates.clear();
+        this.piecesTaken.clear();
+        //example fen: r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3
+
+        for(char x:list){
+            Coordinate curr = new Coordinate(63-index);
+            Piece newP = null;
+            switch (x){
+                case 'P':
+                    newP = new Pawn(curr, true);
+                    index++;
+                    break;
+                case 'p':
+                    newP = new Pawn(curr, false);
+                    index++;
+                    break;
+                case 'R':
+                    if(index==63){
+                        newP = new Rook(curr, true, false);
+                    }
+                    else{
+                        newP = new Rook(curr, true, true);
+                    }
+                    index++;
+                    break;
+                case 'r':
+                    if(index==0){
+                        newP = new Rook(curr, false, false);
+                    }
+                    else{
+                        newP = new Rook(curr, false, true);
+                    }
+                    index++;
+                    break;
+                case 'N':
+                    newP = new Knight(curr, true);
+                    index++;
+                    break;
+                case 'n':
+                    newP = new Knight(curr, false);
+                    index++;
+                    break;
+                case 'B':
+                    newP = new Bishop(curr, true);
+                    index++;
+                    break;
+                case 'b':
+                    if(position){
+                        newP = new Bishop(curr, false);
+                        index++;
+                    }
+                    else if(color){
+                        this.currentPlayer = false;
+                    }
+                    else{
+                        coordinate = 1;
+                    }
+                    break;
+                case 'Q':
+                    if(position){
+                        newP = new Queen(curr, true);
+                        index++;
+                    }
+                    else if(castling){
+                        for(Piece p:this.piecesOnBoard){
+                            if(p.getPieceType() == Piece.PieceType.KING && p.isWhite()){
+                                ((King)p).setLongCastleAllowed(true);
+                            }
+                        }
+                    }
+
+                    break;
+                case 'q':
+                    if(position){
+                        newP = new Queen(curr, false);
+                        index++;
+                    }
+                    else if(castling){
+                        for(Piece p:this.piecesOnBoard){
+                            if(p.getPieceType() == Piece.PieceType.KING && !p.isWhite()){
+                                ((King)p).setLongCastleAllowed(true);
+                            }
+                        }
+                    }
+                    break;
+                case 'K':
+                    if(position){
+                        newP = new King(curr, true);
+                        ((King)newP).setLongCastleAllowed(false);
+                        ((King)newP).setShortCastleAllowed(false);
+                        index++;
+                    }
+                    else if(castling){
+                        for(Piece p:this.piecesOnBoard){
+                            if(p.getPieceType() == Piece.PieceType.KING && p.isWhite()){
+                                ((King)p).setShortCastleAllowed(true);
+                            }
+                        }
+                    }
+                    break;
+                case 'k':
+                    if(position){
+                        newP = new King(curr, false);
+                        ((King)newP).setLongCastleAllowed(false);
+                        ((King)newP).setShortCastleAllowed(false);
+                        index++;
+                    }
+                    else if(castling){
+                        for(Piece p:this.piecesOnBoard){
+                            if(p.getPieceType() == Piece.PieceType.KING && !p.isWhite()){
+                                ((King)p).setShortCastleAllowed(true);
+                            }
+                        }
+                    }
+                    break;
+                case '/':
+                    break;
+                case 'w':
+                    this.currentPlayer = true;
+                    break;
+                case 'a':
+                    coordinate = 0;
+                    break;
+                case 'c':
+                    coordinate = 2;
+                    break;
+                case 'd':
+                    coordinate = 3;
+                    break;
+                case 'e':
+                    coordinate = 4;
+                    break;
+                case 'f':
+                    coordinate = 5;
+                    break;
+                case 'g':
+                    coordinate = 6;
+                    break;
+                case 'h':
+                    coordinate = 7;
+                    break;
+                case '-':
+                    break;
+                case ' ':
+                    if(position){
+                        position = false;
+                    }
+                    else if(color){
+                        color = false;
+                    }
+                    else if(castling){
+                        castling=false;
+                    }
+                    else if(enpassant){
+                        enpassant = false;
+                    }
+                    break;
+                default://number
+                    int y = x-'0';
+                    if(position){
+                        index += y;
+                    } else if (enpassant) {
+                        coordinate = (y-1)*8+coordinate; //it the number is the row
+                    } //else ignore because it is telling number of half moves
+            }
+            if(newP != null){
+                this.piecesOnBoard.add(newP);
+            }
+        } //TODO: add en passant to legal moves unless coord is 0, the target oordinate is coordinate
+
+        int count_k=0;
+        for(Piece piece: this.piecesOnBoard){
+            if(piece.getPieceType() == Piece.PieceType.KING){
+                count_k++;
+            }
+        }
+
+        if(count_k!=2){
+            throw new RuntimeException("No king");
+        }
+
+        this.calculateAllLegalMoves();
+    }
+
     public ChessBoard(ChessBoard copy) {
         this.piecesOnBoard = copy.getPiecesOnBoard();
         this.piecesTaken = copy.getPiecesTaken();

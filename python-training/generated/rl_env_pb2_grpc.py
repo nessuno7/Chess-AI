@@ -26,7 +26,11 @@ if _version_not_supported:
 
 
 class RLEnvStub(object):
-    """Missing associated documentation comment in .proto file."""
+    """
+    ############################################
+    UNSUPERVISED LEARNING SERVER
+    ############################################
+    """
 
     def __init__(self, channel):
         """Constructor.
@@ -42,7 +46,11 @@ class RLEnvStub(object):
 
 
 class RLEnvServicer(object):
-    """Missing associated documentation comment in .proto file."""
+    """
+    ############################################
+    UNSUPERVISED LEARNING SERVER
+    ############################################
+    """
 
     def Rollout(self, request_iterator, context):
         """Missing associated documentation comment in .proto file."""
@@ -67,7 +75,11 @@ def add_RLEnvServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class RLEnv(object):
-    """Missing associated documentation comment in .proto file."""
+    """
+    ############################################
+    UNSUPERVISED LEARNING SERVER
+    ############################################
+    """
 
     @staticmethod
     def Rollout(request_iterator,
@@ -86,6 +98,180 @@ class RLEnv(object):
             '/rl.RLEnv/Rollout',
             rl__env__pb2.StepRequest.SerializeToString,
             rl__env__pb2.StepResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+
+class ProblemsEnvStub(object):
+    """
+    ############################################
+    SUPERVISED LEARNING THROUGH CHESS PUZZLES
+    ############################################
+    """
+
+    def __init__(self, channel):
+        """Constructor.
+
+        Args:
+            channel: A grpc.Channel.
+        """
+        self.Init = channel.unary_unary(
+                '/rl.ProblemsEnv/Init',
+                request_serializer=rl__env__pb2.InitRequest.SerializeToString,
+                response_deserializer=rl__env__pb2.StepResponse.FromString,
+                _registered_method=True)
+        self.Step = channel.stream_stream(
+                '/rl.ProblemsEnv/Step',
+                request_serializer=rl__env__pb2.StepRequest.SerializeToString,
+                response_deserializer=rl__env__pb2.StepResponse.FromString,
+                _registered_method=True)
+        self.Close = channel.unary_unary(
+                '/rl.ProblemsEnv/Close',
+                request_serializer=rl__env__pb2.CloseRequest.SerializeToString,
+                response_deserializer=rl__env__pb2.CloseResponse.FromString,
+                _registered_method=True)
+
+
+class ProblemsEnvServicer(object):
+    """
+    ############################################
+    SUPERVISED LEARNING THROUGH CHESS PUZZLES
+    ############################################
+    """
+
+    def Init(self, request, context):
+        """Start a new episode the fen of the initial chessboard states
+        uses multiple states solving the same problem
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Step(self, request_iterator, context):
+        """Apply a client-chosen move and return the new state + next possible moves
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Close(self, request, context):
+        """ending communication channel once problem is solved
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+
+def add_ProblemsEnvServicer_to_server(servicer, server):
+    rpc_method_handlers = {
+            'Init': grpc.unary_unary_rpc_method_handler(
+                    servicer.Init,
+                    request_deserializer=rl__env__pb2.InitRequest.FromString,
+                    response_serializer=rl__env__pb2.StepResponse.SerializeToString,
+            ),
+            'Step': grpc.stream_stream_rpc_method_handler(
+                    servicer.Step,
+                    request_deserializer=rl__env__pb2.StepRequest.FromString,
+                    response_serializer=rl__env__pb2.StepResponse.SerializeToString,
+            ),
+            'Close': grpc.unary_unary_rpc_method_handler(
+                    servicer.Close,
+                    request_deserializer=rl__env__pb2.CloseRequest.FromString,
+                    response_serializer=rl__env__pb2.CloseResponse.SerializeToString,
+            ),
+    }
+    generic_handler = grpc.method_handlers_generic_handler(
+            'rl.ProblemsEnv', rpc_method_handlers)
+    server.add_generic_rpc_handlers((generic_handler,))
+    server.add_registered_method_handlers('rl.ProblemsEnv', rpc_method_handlers)
+
+
+ # This class is part of an EXPERIMENTAL API.
+class ProblemsEnv(object):
+    """
+    ############################################
+    SUPERVISED LEARNING THROUGH CHESS PUZZLES
+    ############################################
+    """
+
+    @staticmethod
+    def Init(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/rl.ProblemsEnv/Init',
+            rl__env__pb2.InitRequest.SerializeToString,
+            rl__env__pb2.StepResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Step(request_iterator,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.stream_stream(
+            request_iterator,
+            target,
+            '/rl.ProblemsEnv/Step',
+            rl__env__pb2.StepRequest.SerializeToString,
+            rl__env__pb2.StepResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Close(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/rl.ProblemsEnv/Close',
+            rl__env__pb2.CloseRequest.SerializeToString,
+            rl__env__pb2.CloseResponse.FromString,
             options,
             channel_credentials,
             insecure,

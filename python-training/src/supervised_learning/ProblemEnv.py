@@ -5,7 +5,7 @@ import os
 import sys
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-GENERATED_DIR = os.path.join(BASE_DIR, "..", "generated")
+GENERATED_DIR = os.path.join(BASE_DIR, "../..", "generated")
 sys.path.append(GENERATED_DIR)
 
 import rl_env_pb2 as pb
@@ -50,15 +50,23 @@ class RemoteProblemsEnv:
 
         return init_resp
 
-    def step(self, actions: list[pb.ProtoMove]) -> pb.StepResponse:
+    def step(self, actions) -> pb.StepResponse:
         """
         Sends one step to the server and blocks until we receive the next StepResponse.
         actions: length should be num_envs (one move per env).
         """
+        action_list= []
+        for i in range(self.num_envs):
+            action_list.append(pb.ProtoMove(
+                from_sq=actions[i][0],
+                to_sq=actions[i][1],
+                promotion=actions[i][2]
+            ))
+
         if not self._active or self.stream is None:
             raise RuntimeError("Call init(fen) before step().")
 
-        req = pb.StepRequest(num_envs=self.num_envs, action=actions)
+        req = pb.StepRequest(num_envs=self.num_envs, action=action_list)
         self.actions_queue.put(req)
 
         # Receive next server response
