@@ -88,32 +88,33 @@ public class EnvEncoder {
         if (currentMoves == null || currentMoves.isEmpty()) {
             currentMoves = getExpandedLegalMoves();
         }
-        currentPlayer = chessBoard.getCurrentPlayer();
+        boolean sideToMove = chessBoard.getCurrentPlayer();
+        currentPlayer = sideToMove;
 
         if(action.getFromSq() != action.getToSq()){ //checks that the action is not an initial request action
+            // currentMoves are stored in absolute board coordinates, but Python sends moves
+            // in the side-to-move's perspective. For black we rotate the action back to
+            // absolute coordinates (rotation of a square = 63 - square).
+            int fromAbs = sideToMove ? action.getFromSq() : 63 - action.getFromSq();
+            int toAbs   = sideToMove ? action.getToSq()   : 63 - action.getToSq();
+
             for(Move move: currentMoves){
-                if(move.getFlattenInitCoord() == action.getFromSq() && move.getFlattenFinalCoord() == action.getToSq()){
+                if(move.getFlattenInitCoord() == fromAbs && move.getFlattenFinalCoord() == toAbs){
                     if(move.getClass() == Promotion.class){
-                        if (((Promotion)move).getNewPieceType() == switch(action.getPromotion()){
+                        Piece.PieceType requested = switch(action.getPromotion()){
                             case 1-> Piece.PieceType.QUEEN;
                             case 2-> Piece.PieceType.ROOK;
                             case 3 -> Piece.PieceType.BISHOP;
                             case 4-> Piece.PieceType.KNIGHT;
                             default -> throw new IllegalArgumentException("Unexpected value: " + action.getPromotion());
-                        }){
-                            if(currentPlayer){
-                                move.rotateMove();
-                            }
-                            chessBoard.updateState(move);
+                        };
+                        if (((Promotion)move).getNewPieceType() == requested){
+                            chessBoard.updateState(move); // move is already absolute
                             break;
                         }
-
                     }
                     else{
-                        if(currentPlayer){
-                            move.rotateMove();
-                        }
-                        chessBoard.updateState(move);
+                        chessBoard.updateState(move); // move is already absolute
                         break;
                     }
                 }
@@ -127,14 +128,17 @@ public class EnvEncoder {
     }
 
     private void updatePlanes() throws Exception{
-        if(currentPlayer){
-            this.chessBoard.rotateCoords(); //rotates if curr player is black
+        // Present the board from the side-to-move's perspective: rotate only when black is to move,
+        // so the observation planes use the same frame as the moves sent to Python.
+        boolean rotate = !chessBoard.getCurrentPlayer();
+        if(rotate){
+            this.chessBoard.rotateCoords();
         }
         for(Piece piece: this.chessBoard.getPiecesOnBoard()){
             piecePlaneArray[piece.getPieceType().getPieceId()].update(piece);
         }
 
-        if(currentPlayer){
+        if(rotate){
             this.chessBoard.rotateCoords(); //rotates back
         }
     }
@@ -236,13 +240,21 @@ public class EnvEncoder {
 
         envStateBuild.setReward(getRewardBefore()); //always returns the
 
-        for (Move m : currentMoves) { //rotates move if it is black so the RL always return in absolute terms
-            if(!currentPlayer){
-                m.rotateMove();
+        // currentMoves are in absolute board coordinates. Python expects them in the
+        // side-to-move's perspective, so for black we rotate each square (63 - square).
+        // We must NOT mutate the move objects in currentMoves, since they are reused to
+        // validate the next incoming action.
+        boolean sideToMove = chessBoard.getCurrentPlayer();
+        for (Move m : currentMoves) {
+            int fromSq = m.getFlattenInitCoord();
+            int toSq = m.getFlattenFinalCoord();
+            if(!sideToMove){
+                fromSq = 63 - fromSq;
+                toSq = 63 - toSq;
             }
             ProtoMove.Builder protoMove = ProtoMove.newBuilder();
-            protoMove.setFromSq(m.getFlattenInitCoord());
-            protoMove.setToSq(m.getFlattenFinalCoord());
+            protoMove.setFromSq(fromSq);
+            protoMove.setToSq(toSq);
 
             if(m.getClass() == Promotion.class){
                 protoMove.setPromotion(switch(((Promotion) m).getNewPieceType()){

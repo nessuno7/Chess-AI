@@ -1,9 +1,5 @@
 package main.chess;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonObject;
-
 public class Coordinate implements Comparable<Coordinate> {
     private int row;
     private int column;

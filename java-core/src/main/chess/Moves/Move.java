@@ -1,7 +1,5 @@
 package main.chess.Moves;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonObject;
 import main.chess.Coordinate;
 import main.chess.Pieces.Piece;
 

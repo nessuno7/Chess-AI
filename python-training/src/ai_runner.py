@@ -94,7 +94,7 @@ def select_actions(
       padded_move_tensors: (moves_from, moves_to, moves_promo, mask) for later PPO update
     """
 
-    obs = decoder.getEnvObs()
+    obs = decoder.getObservationMatrixTensor()
     moves_from, moves_to, moves_promo, mask = decoder.getLegalMovesTensors()
 
     logits = model.move_logits(obs, moves_from, moves_to, moves_promo)  # [B, K]
