@@ -1,5 +1,3 @@
-from collections import deque
-
 import chess
 import numpy as np
 
@@ -28,15 +26,16 @@ class ChessGame:
         self.stored_timesteps = stored_timesteps
         self.positions_map: dict[int, int] = {}
 
-        # newest first: history[f] is the position f plies ago.
-        # maxlen makes appendleft drop the oldest frame for us
+        # oldest first: history[i] is the position after i plies, history[-1] is the current one.
+        # the whole game is kept, not just the last stored_timesteps frames, so undo_move can put
+        # back a frame that has already scrolled out of the encoded window; encode() takes the tail
         # each entry is a (white_view, black_view) pair, see _position_frame for why both are stored
-        self.history: deque[tuple[np.ndarray, np.ndarray]] = deque(maxlen=self.stored_timesteps)
+        self.history: list[tuple[np.ndarray, np.ndarray]] = []
 
         # hashing the intial board first position
         key = self.board._transposition_key()
         self.positions_map[key] = self.positions_map.get(key, 0) + 1
-        self.history.appendleft(self._position_frame())
+        self.history.append(self._position_frame())
 
     def legal_moves_list(self):
         r_ = []
@@ -51,12 +50,38 @@ class ChessGame:
             self.board.push(move)
             key = self.board._transposition_key()
             self.positions_map[key] = self.positions_map.get(key, 0) + 1 # updating the ferqeuncy table of baord occurences
-            self.history.appendleft(self._position_frame()) # the new position becomes frame 0, the rest shift down
+            self.history.append(self._position_frame()) # the new position becomes the newest frame
         else:
             from_sq    = chess.square_name(move.from_square)   # 'e2'
-            to_sq      = chess.square_name(move.to_square)     # 'e4'    
+            to_sq      = chess.square_name(move.to_square)     # 'e4'
 
             raise MoveNotLegalExcpetion(f"Illegal move: no piece on {from_sq} ({from_sq} -> {to_sq})")
+
+    def undo_move(self):
+        """
+        Take back the last move played and return it, so a search can walk the tree with
+        play_move/undo_move instead of copying the whole game at every node.
+
+        Undoes exactly what play_move did, in reverse: the frame of the position being left is
+        dropped, its count in positions_map goes back down (and the entry disappears when it hits
+        zero, so a position never seen again leaves no trace), and the board is popped.
+
+        Raises IndexError, like chess.Board.pop(), when there is no move to take back. A game
+        built from a fen starts at that fen: the position it was constructed with is the floor.
+        """
+        if not self.board.move_stack:
+            raise IndexError("no move to undo")
+
+        # the key of the position we are leaving, so it has to be read before the board is popped
+        key = self.board._transposition_key()
+        count = self.positions_map.get(key, 0) - 1
+        if count > 0:
+            self.positions_map[key] = count
+        else:
+            self.positions_map.pop(key, None)
+
+        self.history.pop()
+        return self.board.pop()
 
     def canonical_move(self, move, turn):
         piece = self.board.piece_type_at(move.from_square)
@@ -227,8 +252,11 @@ class ChessGame:
         # planes i: 7 onwards; one 14-plane frame per stored timestep, newest first.
         # frames we do not have yet (early in the game) stay zero-padded
         # all frames use the current player's view, picked from the pair stored in history
+        # history is oldest first and holds the whole game, so the window is the last
+        # stored_timesteps frames, walked backwards to put the newest one at frame 0
         view = 0 if us == chess.WHITE else 1
-        for i, frames in enumerate(self.history):
+        window = self.history[-self.stored_timesteps:] if self.stored_timesteps else []
+        for i, frames in enumerate(reversed(window)):
             base = N_GLOBALS + N_FRAME*i
             x[base:base + N_FRAME] = frames[view]
 

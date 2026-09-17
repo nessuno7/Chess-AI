@@ -313,7 +313,7 @@ try:
     assert x[0].max() == 0.0, "plane 0 should be 0 when black is to move"
 
     # stored pair: black view is exactly the colour-swapped, rank-flipped white view
-    white_view, black_view = g.history[0]
+    white_view, black_view = g.history[-1]     # history is oldest first, [-1] is the current position
     perm = np.r_[6:12, 0:6, 12:14]
     assert np.array_equal(black_view, white_view[perm, ::-1, :]), "stored black view != flipped white view"
     assert np.array_equal(black_view[perm, ::-1, :], white_view), "flipping twice should give the white view back"
@@ -321,7 +321,7 @@ try:
 
     # white to move: encode() copies the white view untouched
     g.play_move(chess.Move.from_uci("e7e5"))
-    assert np.array_equal(frame(g.encode(), 0), g.history[0][0]), "encode() should copy the white view when white is to move"
+    assert np.array_equal(frame(g.encode(), 0), g.history[-1][0]), "encode() should copy the white view when white is to move"
 
     # castling relative to the mover: black to move with black q, white K -> [our K, our Q, their K, their Q]
     x = ChessGame(fen="r3k2r/8/8/8/8/8/8/R3K2R b Kq - 0 1").encode()
