@@ -1,0 +1,13 @@
+1) board encoding:
+taking inspiration from AlphaZero 8x8x119 tensors, I will implement a reduced version 
+of the 8x8x119
+AlphaZero:
+for each timestep 6 planes for white pieces, 6 planes for black pieces and 2 planes for repetition count
+this was stored for the current timstep and the previous 7, giving 8 x 14 = 112 8x8 planes, 
+the last 7 planes are so called global constants:
+colour, move count, castling ×4, no-progress counter
+
+For this project, I will make the number of previous timesteps a hyperparamter to fine tune the model later on
+
+2) legal move masking:
+will again use the alpha zero legal move masking consiting of an aarray containing all possible moves, including all possible promotions

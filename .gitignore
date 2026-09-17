@@ -26,3 +26,9 @@ venv/
 # =====================
 .DS_Store
 Thumbs.db
+
+# ====================
+# miscellaneous text files
+# ====================
+
+.text-files/chess-docs.md
