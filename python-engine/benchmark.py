@@ -13,9 +13,11 @@ Stockfish Skill Level 0 still beats a young net every game; while the score is s
 --depth 1 (or 2) so there is something to measure.
 
     python benchmark.py ../checkpoints/selfplay_best.pt C:/tools/stockfish.exe --games 10 --skill 0
+    python benchmark.py ../checkpoints/selfplay_best.pt --games 10   # STOCKFISH_PATH from <repo>/.env
 """
 
 import argparse
+import os
 import random
 
 import chess
@@ -25,7 +27,19 @@ import torch
 from arena import arena_config, score
 from board import ChessGame
 from monte_carlo_tree_search import MonteCarloTS
-from network import NetEvaluator, load_checkpoint
+from network import REPO_ROOT, NetEvaluator, load_checkpoint
+
+
+def stockfish_from_env(env_file=REPO_ROOT / ".env"):
+    """STOCKFISH_PATH from the environment, else from `env_file` (<repo>/.env), else None."""
+    if os.environ.get("STOCKFISH_PATH"):
+        return os.environ["STOCKFISH_PATH"]
+    if env_file.exists():
+        for line in env_file.read_text().splitlines():
+            key, sep, value = line.partition("=")
+            if sep and key.strip() == "STOCKFISH_PATH":
+                return value.strip().strip("\"'") or None
+    return None
 
 
 def play_vs_engine(evaluator, engine, limit, num_games=10, sims=200, stored_timesteps=1,
@@ -87,7 +101,8 @@ def append_benchmark(path, iteration, generation, skill, depth, wins, losses, dr
 def main():
     ap = argparse.ArgumentParser(description="play a checkpoint against Stockfish")
     ap.add_argument("checkpoint")
-    ap.add_argument("stockfish", help="path to the Stockfish binary")
+    ap.add_argument("stockfish", nargs="?", default=stockfish_from_env(),
+                    help="path to the Stockfish binary (default: STOCKFISH_PATH from env / .env)")
     ap.add_argument("--games", type=int, default=10)
     ap.add_argument("--sims", type=int, default=200)
     ap.add_argument("--skill", type=int, default=0, help="Stockfish Skill Level (0-20)")
@@ -96,6 +111,8 @@ def main():
     ap.add_argument("--max-plies", type=int, default=400)
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = ap.parse_args()
+    if not args.stockfish:
+        ap.error("no Stockfish path: pass one or set STOCKFISH_PATH in .env")
 
     net, _ = load_checkpoint(args.checkpoint, args.device)
     w, l, d = play_vs_stockfish(NetEvaluator(net, args.device), args.stockfish, args.games,

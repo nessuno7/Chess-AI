@@ -25,7 +25,7 @@ sys.path.insert(0, ENGINE)
 import chess.engine
 
 from arena import arena_config, play_match, score
-from benchmark import append_benchmark, play_vs_engine
+from benchmark import append_benchmark, play_vs_engine, stockfish_from_env
 from board import ChessGame
 from monte_carlo_tree_search import POLICY_SIZE, Evaluator, MCTSConfig, UniformEvaluator
 from network import ChessNet, NetEvaluator, load_checkpoint, save_checkpoint
@@ -252,6 +252,26 @@ with tempfile.TemporaryDirectory() as d:
     check("benchmark.csv: one header, one row per call",
           path.read_text().splitlines() == ["iteration,generation,skill,depth,wins,losses,draws",
                                             "5,2,0,,1,8,1", "10,4,0,1,2,7,1"])
+
+saved_env = os.environ.pop("STOCKFISH_PATH", None)
+try:
+    with tempfile.TemporaryDirectory() as d:
+        from pathlib import Path
+        env_file = Path(d) / ".env"
+        check("stockfish_from_env: no variable, no .env -> None", stockfish_from_env(env_file) is None)
+        env_file.write_text('# comment\nOTHER=x\nSTOCKFISH_PATH = "C:/sf/stockfish.exe"\n')
+        check("stockfish_from_env: read from .env (spaces and quotes stripped)",
+              stockfish_from_env(env_file) == "C:/sf/stockfish.exe", repr(stockfish_from_env(env_file)))
+        env_file.write_text("STOCKFISH_PATH=\n")
+        check("stockfish_from_env: empty value -> None", stockfish_from_env(env_file) is None)
+        os.environ["STOCKFISH_PATH"] = "D:/env/stockfish.exe"
+        env_file.write_text("STOCKFISH_PATH=C:/sf/stockfish.exe\n")
+        check("stockfish_from_env: the environment variable wins over .env",
+              stockfish_from_env(env_file) == "D:/env/stockfish.exe")
+finally:
+    os.environ.pop("STOCKFISH_PATH", None)
+    if saved_env is not None:
+        os.environ["STOCKFISH_PATH"] = saved_env
 
 # ------------------------------------------------------- command line scripts
 print("command line scripts")

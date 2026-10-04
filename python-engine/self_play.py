@@ -24,8 +24,9 @@ scored as a loss for it. In a --no-resign-frac share of the games resigning is d
 those games measure the false positive rate (a side that would have resigned but did not lose),
 printed every iteration; lower the threshold if it climbs above ~5%.
 
-With --stockfish PATH the best net plays --bench-games against Stockfish at --bench-skill every
---bench-every iterations, appended to <out-dir>/benchmark.csv (see benchmark.py).
+With --stockfish PATH (or a bare --stockfish: STOCKFISH_PATH from <repo>/.env) the best net
+plays --bench-games against Stockfish at --bench-skill every --bench-every iterations,
+appended to <out-dir>/benchmark.csv (see benchmark.py).
 
 Training loop:
     repeat:  best plays --games-per-iter games  ->  replay buffer  ->  --train-steps steps on
@@ -54,7 +55,7 @@ import chess
 import torch
 
 from arena import arena_config, play_match, score
-from benchmark import append_benchmark, play_vs_stockfish
+from benchmark import append_benchmark, play_vs_stockfish, stockfish_from_env
 from board import ChessGame
 from monte_carlo_tree_search import MCTSConfig, MonteCarloTS, search_many
 from network import CHECKPOINT_DIR, ChessNet, NetEvaluator, load_checkpoint, save_checkpoint
@@ -238,7 +239,8 @@ def main():
     ap.add_argument("--arena-every", type=int, default=5)
     ap.add_argument("--arena-sims", type=int, default=None, help="default: --sims")
     ap.add_argument("--gate-threshold", type=float, default=0.55)
-    ap.add_argument("--stockfish", help="path to a Stockfish binary, turns the benchmark on")
+    ap.add_argument("--stockfish", nargs="?", const=stockfish_from_env() or "",
+                    help="turns the benchmark on; bare --stockfish uses STOCKFISH_PATH from .env")
     ap.add_argument("--bench-every", type=int, default=5, help="iterations between Stockfish benchmarks")
     ap.add_argument("--bench-games", type=int, default=10)
     ap.add_argument("--bench-skill", type=int, default=0, help="Stockfish Skill Level (0-20)")
@@ -249,6 +251,8 @@ def main():
     ap.add_argument("--blocks", type=int, default=6, help="only for a new run without --init")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = ap.parse_args()
+    if args.stockfish == "":
+        ap.error("bare --stockfish needs STOCKFISH_PATH in .env (or pass a path)")
 
     out = Path(args.out_dir)
     latest_path = out / "selfplay_latest.pt"
